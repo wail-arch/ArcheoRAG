@@ -1,0 +1,8 @@
+# ArcheoQA backend dependencies
+paper-qa[docling]
+fastapi>=0.115
+uvicorn[standard]>=0.34
+python-multipart>=0.0.18
+websockets>=14.0
+python-dotenv>=1.0
+litellm

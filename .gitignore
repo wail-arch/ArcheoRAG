@@ -1,0 +1,93 @@
+# ==============================
+# ArcheoQA .gitignore
+# ==============================
+# Only push ArcheoQA code (backend/, frontend/, README, .env.example, LICENSE)
+# PaperQA2 upstream source stays local only
+
+# ------ PaperQA2 upstream (DO NOT PUSH) ------
+/src/
+/packages/
+/tests/
+/docs/
+/pyproject.toml
+/uv.lock
+/CITATION.cff
+/CONTRIBUTING.md
+/.github/
+/.mailmap
+/.pre-commit-config.yaml
+/.python-version
+/.gitattributes
+
+# ------ Local dev/debug files ------
+debug*.bat
+start.bat
+run.py
+test_import.py
+indexing.txt
+/cd
+/python
+/.claude/
+
+# ------ Python ------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.pytype/
+.pyre/
+cython_debug/
+**/version.py
+
+# ------ Environments ------
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# ------ Data (keep structure, not content) ------
+data/papers/*.pdf
+data/docs_cache.pkl
+data/settings.json
+
+# ------ Node / Frontend ------
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ------ IDE ------
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ------ OS ------
+.DS_Store
+Thumbs.db
+*.log
