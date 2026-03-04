@@ -6,8 +6,11 @@
 [![React 19](https://img.shields.io/badge/React-19-61dafb)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
+[![Status: Work in Progress](https://img.shields.io/badge/Status-Work%20in%20Progress-orange)]()
 
 <!-- Add a screenshot here: ![ArcheoQA Screenshot](docs/screenshot.png) -->
+
+> **Note:** This project is under active development. Core Q&A with citations is functional, but advanced features (cross-paper analysis, contradiction detection, etc.) are still being built. Contributions and feedback welcome!
 
 ---
 
@@ -85,8 +88,8 @@ archeoqa/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/archeoqa.git
-cd archeoqa
+git clone https://github.com/wail-arch/ArcheoRAG.git
+cd ArcheoRAG
 ```
 
 ### 2. Configure API keys
@@ -189,6 +192,19 @@ Settings are persisted in `data/settings.json`.
 | `GET` | `/health` | Health check |
 
 Interactive API docs available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+---
+
+## Roadmap
+
+These features are planned or in progress:
+
+- [ ] **Cross-paper similarity analysis** — find related findings across your PDF collection
+- [ ] **Contradiction detection** — flag conflicting claims between papers
+- [ ] **Systematic review mode** — synthesize evidence across multiple sources on a topic
+- [ ] **Research gap identification** — highlight under-explored areas in your corpus
+- [ ] **Multi-language support** — queries and answers in French, Arabic, etc.
+- [ ] **Zotero integration** — import papers directly from your Zotero library
 
 ---
 
