@@ -48,27 +48,29 @@
 ## Architecture
 
 ```
-archeoqa/
-├── backend/                  # FastAPI backend
-│   ├── app.py                # Entry point
-│   ├── api/
-│   │   ├── routes_qa.py      # POST /api/ask + WebSocket /api/ws/ask
-│   │   ├── routes_papers.py  # CRUD papers + WebSocket /api/ws/index
-│   │   └── routes_settings.py
-│   └── services/
-│       ├── qa_service.py     # PaperQA2 Docs wrapper + agent
-│       └── config.py         # Model settings (GPT-5.2, embeddings, etc.)
-│
-├── frontend/                 # React SPA
-│   └── src/
-│       ├── pages/            # ChatPage, LibraryPage, SettingsPage
-│       ├── components/       # AnswerCard, ChatInput, Sidebar, etc.
-│       └── hooks/            # useWebSocket, useApi
-│
-├── data/
-│   └── papers/               # Drop your PDFs here
-│
-└── .env                      # API keys (not committed)
+ArcheoRAG/
+└── archeoqa/                     # All project code lives here
+    ├── backend/                  # FastAPI backend
+    │   ├── app.py                # Entry point
+    │   ├── api/
+    │   │   ├── routes_qa.py      # POST /api/ask + WebSocket /api/ws/ask
+    │   │   ├── routes_papers.py  # CRUD papers + WebSocket /api/ws/index
+    │   │   └── routes_settings.py
+    │   └── services/
+    │       ├── qa_service.py     # PaperQA2 Docs wrapper + agent
+    │       └── config.py         # Model settings (GPT-5.2, embeddings, etc.)
+    │
+    ├── frontend/                 # React SPA
+    │   └── src/
+    │       ├── pages/            # ChatPage, LibraryPage, SettingsPage
+    │       ├── components/       # AnswerCard, ChatInput, Sidebar, etc.
+    │       └── hooks/            # useWebSocket, useApi
+    │
+    ├── data/
+    │   └── papers/               # Drop your PDFs here
+    │
+    ├── .env.example              # API key template
+    └── .env                      # Your API keys (not committed)
 ```
 
 ---
@@ -95,6 +97,7 @@ cd ArcheoRAG
 ### 2. Configure API keys
 
 ```bash
+cd archeoqa
 cp .env.example .env
 ```
 
@@ -128,14 +131,15 @@ cd ..
 
 ### 5. Start the app
 
-Open two terminals:
+Open two terminals (both from the `archeoqa/` directory):
 
 ```bash
 # Terminal 1 — Backend (port 8000)
+cd archeoqa
 uvicorn backend.app:app --port 8000
 
 # Terminal 2 — Frontend (port 5173)
-cd frontend && npm run dev
+cd archeoqa/frontend && npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
@@ -144,7 +148,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## Quick Start
 
-1. **Add PDFs** — drop PDF files into `data/papers/` or use the drag & drop zone in the Library page
+1. **Add PDFs** — drop PDF files into `archeoqa/data/papers/` or use the drag & drop zone in the Library page
 2. **Index** — click "Index All" in the Library page and wait for the progress bar to complete
 3. **Ask** — go to Chat, type a question (or click a suggestion), and get a cited answer
 
