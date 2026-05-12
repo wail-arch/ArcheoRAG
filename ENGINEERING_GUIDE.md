@@ -1,4 +1,4 @@
-# Vibe Coding Practices For ArcheoRAG
+# Engineering Guide For ArcheoRAG
 
 ## Work Style
 - Make small, testable changes.
