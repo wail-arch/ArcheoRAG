@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import ChatPage from './pages/ChatPage';
 import LibraryPage from './pages/LibraryPage';
+import MatrixPage from './pages/MatrixPage';
 import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<ChatPage />} />
             <Route path="/library" element={<LibraryPage />} />
+            <Route path="/matrix" element={<MatrixPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

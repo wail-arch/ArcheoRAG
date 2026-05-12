@@ -8,7 +8,7 @@ import logging
 import traceback
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..services.qa_service import QAStatus, get_qa_service
 
@@ -28,6 +28,7 @@ class AskResponse(BaseModel):
     contexts: list[dict]
     cost: float
     session_id: str
+    targeting: dict = Field(default_factory=lambda: {"mode": "global"})
 
 
 @router.post("/ask", response_model=AskResponse)
@@ -49,6 +50,7 @@ async def ask_question(request: AskRequest):
         contexts=result.contexts,
         cost=result.cost,
         session_id=result.session_id,
+        targeting=result.targeting,
     )
 
 

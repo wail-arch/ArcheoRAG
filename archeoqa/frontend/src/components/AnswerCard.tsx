@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { BookOpen, ChevronDown, ChevronUp, Copy, Download, DollarSign, Check } from 'lucide-react';
-import type { AskResponse, ContextItem } from '../hooks/useApi';
+import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Copy, Download, DollarSign, Check, Target } from 'lucide-react';
+import type { AskResponse, ContextItem, TargetingInfo, TargetingPaper } from '../hooks/useApi';
 import CitationBadge from './CitationBadge';
 
 interface AnswerCardProps {
@@ -51,7 +51,7 @@ function deduplicateContexts(contexts: ContextItem[]): ContextItem[] {
 }
 
 function buildMarkdownExport(data: AskResponse, contexts: ContextItem[]): string {
-  let md = `## Question\n${data.question}\n\n## Réponse\n${data.answer}\n\n## Sources\n`;
+  let md = `## Question\n${data.question}\n\n## Réponse\n${sanitizeAnswer(data.answer, data.targeting)}\n\n## Sources\n`;
   contexts.forEach((ctx, i) => {
     const ref = formatDocname(ctx.text.doc.docname);
     const pages = parsePages(ctx.text.name);
@@ -60,6 +60,208 @@ function buildMarkdownExport(data: AskResponse, contexts: ContextItem[]): string
   });
   md += `---\nCoût: $${data.cost.toFixed(4)}\n`;
   return md;
+}
+
+function paperLabel(paper: TargetingPaper): string {
+  return paper.label || paper.title || paper.docname || paper.filename;
+}
+
+function stripMarkdownInline(value: string): string {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
+    .trim();
+}
+
+function normalizeForMatch(value: string): string {
+  return stripMarkdownInline(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function candidateLabels(paper: TargetingPaper): string[] {
+  return [
+    paper.label,
+    paper.title ?? undefined,
+    paper.docname,
+    paper.filename,
+    paper.filename?.replace(/\.pdf$/i, ''),
+  ].filter(Boolean) as string[];
+}
+
+function paperOrderForRow(rowTitle: string, targeting?: TargetingInfo): number {
+  const row = normalizeForMatch(rowTitle);
+  const papers = targeting?.resolved_papers ?? [];
+  const index = papers.findIndex((paper) =>
+    candidateLabels(paper).some((candidate) => {
+      const normalized = normalizeForMatch(candidate);
+      return normalized.length > 0 && (row.includes(normalized) || normalized.includes(row));
+    })
+  );
+  return index >= 0 ? index : 10_000;
+}
+
+function normalizeInlineCitations(answer: string, targeting?: TargetingInfo): string {
+  let normalized = answer;
+  const papers = targeting?.resolved_papers ?? [];
+  [...papers].sort((a, b) => b.docname.length - a.docname.length).forEach((paper) => {
+    if (!paper.docname) return;
+    const label = paperLabel(paper);
+    const escaped = paper.docname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    normalized = normalized.replace(
+      new RegExp(`\\b${escaped}\\s+pages?\\s+(\\d+(?:\\s*[-–,]\\s*\\d+)*)`, 'gi'),
+      (_, pages: string) => `${label} p. ${pages.trim()}`
+    );
+  });
+  return normalized;
+}
+
+function sanitizeAnswer(answer: string, targeting?: TargetingInfo): string {
+  return normalizeInlineCitations(answer, targeting)
+    .replace(/\(\s*(?:pqac|pqa|chunk|doc)[-_][A-Za-z0-9_.:-]+\s*\)/gi, '')
+    .replace(/\b(?:pqac|pqa|chunk|doc)[-_][A-Za-z0-9_.:-]+\b/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim();
+}
+
+function splitMarkdownTable(markdown: string): {
+  before: string;
+  headers: string[];
+  rows: string[][];
+  after: string;
+} | null {
+  const lines = markdown.split(/\r?\n/);
+  const tableStart = lines.findIndex((line, index) => {
+    const next = lines[index + 1]?.trim() ?? '';
+    return line.trim().startsWith('|') && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(next);
+  });
+
+  if (tableStart < 0) return null;
+
+  let tableEnd = tableStart + 2;
+  while (tableEnd < lines.length && lines[tableEnd].trim().startsWith('|')) {
+    tableEnd += 1;
+  }
+
+  const parseRow = (line: string) =>
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((cell) => cell.trim());
+
+  const headers = parseRow(lines[tableStart]);
+  const rows = lines.slice(tableStart + 2, tableEnd).map(parseRow);
+  if (headers.length < 2 || rows.length === 0) return null;
+
+  return {
+    before: lines.slice(0, tableStart).join('\n').trim(),
+    headers,
+    rows,
+    after: lines.slice(tableEnd).join('\n').trim(),
+  };
+}
+
+function AnswerMarkdown({ answer, targeting }: { answer: string; targeting?: TargetingInfo }) {
+  const sanitized = sanitizeAnswer(answer, targeting);
+  const table = splitMarkdownTable(sanitized);
+
+  if (!table) {
+    return <ReactMarkdown>{sanitized}</ReactMarkdown>;
+  }
+
+  const wideTable = table.headers.length > 4;
+  const orderedRows = [...table.rows].sort((a, b) => {
+    const orderA = paperOrderForRow(a[0] || '', targeting);
+    const orderB = paperOrderForRow(b[0] || '', targeting);
+    if (orderA !== orderB) return orderA - orderB;
+    return table.rows.indexOf(a) - table.rows.indexOf(b);
+  });
+
+  return (
+    <div className="space-y-4">
+      {table.before && <ReactMarkdown>{table.before}</ReactMarkdown>}
+      {wideTable ? (
+        <div className="space-y-3">
+          {orderedRows.map((row, rowIndex) => (
+            <div
+              key={`${row.join('|')}-${rowIndex}`}
+              className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900"
+            >
+              <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {stripMarkdownInline(row[0] || `Entrée ${rowIndex + 1}`)}
+              </h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {table.headers.slice(1).map((header, headerIndex) => (
+                  <div
+                    key={`${header}-${headerIndex}`}
+                    className="rounded-md border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/50"
+                  >
+                    <p className="mb-1 text-[11px] font-semibold uppercase text-gray-500 dark:text-gray-400">
+                      {header}
+                    </p>
+                    <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                      <ReactMarkdown>{row[headerIndex + 1] || 'Non documenté dans les contextes.'}</ReactMarkdown>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+          <table className="min-w-full border-collapse text-left text-sm">
+            <thead className="bg-gray-100 dark:bg-gray-800">
+              <tr>
+                {table.headers.map((header) => (
+                  <th
+                    key={header}
+                    className="border-b border-gray-200 px-3 py-2 align-top font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200"
+                  >
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {orderedRows.map((row, rowIndex) => (
+                <tr key={`${row.join('|')}-${rowIndex}`} className="odd:bg-white even:bg-gray-50 dark:odd:bg-gray-900 dark:even:bg-gray-800/50">
+                  {table.headers.map((header, cellIndex) => (
+                    <td
+                      key={`${header}-${cellIndex}`}
+                      className="border-b border-gray-100 px-3 py-2 align-top text-gray-700 dark:border-gray-800 dark:text-gray-300"
+                    >
+                      <ReactMarkdown>{row[cellIndex] || ''}</ReactMarkdown>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {table.after && <ReactMarkdown>{table.after}</ReactMarkdown>}
+    </div>
+  );
+}
+
+function warningLabel(warning: string): string {
+  switch (warning) {
+    case 'internal_ids_removed':
+      return 'identifiants internes retirés';
+    case 'out_of_scope_contexts_detected':
+      return 'sources hors périmètre écartées';
+    default:
+      return warning.replaceAll('_', ' ');
+  }
 }
 
 export default function AnswerCard({ data }: AnswerCardProps) {
@@ -108,10 +310,12 @@ export default function AnswerCard({ data }: AnswerCardProps) {
         </div>
       </div>
 
+      <TargetingNotice targeting={data.targeting} />
+
       {/* Answer */}
       <div className="px-6 py-5">
         <div className="prose prose-sm max-w-none text-gray-800 dark:text-gray-200 dark:prose-invert">
-          <ReactMarkdown>{data.answer}</ReactMarkdown>
+          <AnswerMarkdown answer={data.answer} targeting={data.targeting} />
         </div>
       </div>
 
@@ -145,6 +349,62 @@ export default function AnswerCard({ data }: AnswerCardProps) {
       <div className="bg-gray-50 dark:bg-gray-800 px-6 py-2 border-t border-gray-200 dark:border-gray-700 flex items-center gap-1 text-xs text-gray-400">
         <DollarSign className="w-3 h-3" />
         <span>Cost: ${data.cost.toFixed(4)}</span>
+      </div>
+    </div>
+  );
+}
+
+function TargetingNotice({ targeting }: { targeting?: TargetingInfo }) {
+  if (!targeting || targeting.mode === 'global') return null;
+
+  if (targeting.mode === 'needs_clarification') {
+    const unresolved = targeting.unresolved_mentions ?? [];
+    return (
+      <div className="px-6 py-3 border-b border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+        <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold">Ciblage à clarifier</p>
+            {unresolved.length > 0 && (
+              <p className="text-xs mt-1">
+                Références non résolues : {unresolved.join(', ')}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const papers = targeting.resolved_papers ?? [];
+  if (papers.length === 0) return null;
+
+  const label = targeting.mode === 'manual_filter'
+    ? 'Recherche limitée par filtre manuel'
+    : 'Recherche limitée automatiquement';
+  const isStructured = targeting.answer_mode === 'targeted_comparison';
+  const warnings = (targeting.warnings ?? []).filter((warning) => warning !== 'internal_ids_removed');
+
+  return (
+    <div className="px-6 py-3 border-b border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20">
+      <div className="flex items-start gap-2 text-sm text-emerald-800 dark:text-emerald-200">
+        <Target className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="font-semibold">{label}</p>
+          {isStructured && (
+            <p className="text-xs mt-1 font-medium">
+              Réponse comparative structurée
+            </p>
+          )}
+          <p className="text-xs mt-1">
+            {papers.map(paperLabel).join(', ')}
+          </p>
+          {warnings.length > 0 && (
+            <p className="text-xs mt-1 text-emerald-700 dark:text-emerald-300">
+              Validation: {warnings.map(warningLabel).join(', ')}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

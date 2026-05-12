@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { uploadPaper } from '../hooks/useApi';
+import { getErrorMessage } from '../utils/errors';
 
 interface UploadZoneProps {
   onUploaded?: () => void;
@@ -27,8 +28,8 @@ export default function UploadZone({ onUploaded }: UploadZoneProps) {
         try {
           await uploadPaper(file);
           successCount++;
-        } catch (err: any) {
-          setMessage({ type: 'error', text: `Erreur: ${err.message || 'Upload échoué'}` });
+        } catch (err: unknown) {
+          setMessage({ type: 'error', text: `Erreur: ${getErrorMessage(err, 'Upload échoué')}` });
         }
       }
 

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .api.routes_analysis import router as analysis_router
 from .api.routes_papers import router as papers_router
 from .api.routes_qa import router as qa_router
 from .api.routes_settings import router as settings_router
@@ -60,6 +61,7 @@ app.add_middleware(
 app.include_router(qa_router)
 app.include_router(papers_router)
 app.include_router(settings_router)
+app.include_router(analysis_router)
 
 
 @app.get("/")

@@ -5,41 +5,22 @@ import AnswerCard from '../components/AnswerCard';
 import StatusBar from '../components/StatusBar';
 import { useQAWebSocket } from '../hooks/useWebSocket';
 import { askQuestion, type AskResponse } from '../hooks/useApi';
-
-const STORAGE_KEY = 'archeoqa-chat-history';
-const MAX_ENTRIES = 50;
-
-export interface ChatEntry {
-  id: string;
-  data: AskResponse;
-}
-
-function loadHistory(): ChatEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ChatEntry[];
-    return parsed.slice(-MAX_ENTRIES);
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(entries: ChatEntry[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
-  } catch { /* localStorage full — ignore */ }
-}
-
-export function getTotalCost(): number {
-  const entries = loadHistory();
-  return entries.reduce((sum, e) => sum + (e.data.cost ?? 0), 0);
-}
+import { clearSavedHistory, loadHistory, saveHistory, type ChatEntry } from '../utils/chatHistory';
 
 export default function ChatPage() {
   const [history, setHistory] = useState<ChatEntry[]>(loadHistory);
-  const { status, result, error, ask: wsAsk, isLoading } = useQAWebSocket();
   const [fallbackLoading, setFallbackLoading] = useState(false);
+
+  const addAnswer = useCallback((answer: AskResponse) => {
+    setHistory((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].data.session_id === answer.session_id) {
+        return prev;
+      }
+      return [...prev, { id: crypto.randomUUID(), data: answer }];
+    });
+  }, []);
+
+  const { status, error, ask: wsAsk, isLoading } = useQAWebSocket(addAnswer);
 
   // Persist whenever history changes
   useEffect(() => {
@@ -53,9 +34,9 @@ export default function ChatPage() {
     } catch {
       setFallbackLoading(true);
       try {
-        const res = await askQuestion(question, useAgent);
+        const res = await askQuestion(question, useAgent, paperFilter);
         setHistory((prev) => [...prev, { id: crypto.randomUUID(), data: res }]);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Ask failed:', err);
       }
       setFallbackLoading(false);
@@ -64,13 +45,8 @@ export default function ChatPage() {
 
   const clearHistory = useCallback(() => {
     setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
+    clearSavedHistory();
   }, []);
-
-  // Add result to history when WebSocket completes
-  if (result && (history.length === 0 || history[history.length - 1].data.session_id !== result.session_id)) {
-    setHistory((prev) => [...prev, { id: crypto.randomUUID(), data: result }]);
-  }
 
   const loading = isLoading || fallbackLoading;
 

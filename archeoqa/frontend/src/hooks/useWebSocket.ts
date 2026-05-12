@@ -21,7 +21,7 @@ export interface UseWebSocketReturn {
   isLoading: boolean;
 }
 
-export function useQAWebSocket(): UseWebSocketReturn {
+export function useQAWebSocket(onAnswer?: (answer: AskResponse) => void): UseWebSocketReturn {
   const [status, setStatus] = useState<WSStatus>({
     stage: 'idle',
     message: '',
@@ -68,6 +68,7 @@ export function useQAWebSocket(): UseWebSocketReturn {
 
         case 'answer':
           setResult(data.data as AskResponse);
+          onAnswer?.(data.data as AskResponse);
           setStatus({ stage: 'done', message: 'Answer ready', progress: 1 });
           ws.close();
           break;
@@ -88,7 +89,7 @@ export function useQAWebSocket(): UseWebSocketReturn {
     ws.onclose = () => {
       wsRef.current = null;
     };
-  }, []);
+  }, [onAnswer]);
 
   const isLoading = !['idle', 'done', 'error'].includes(status.stage);
 

@@ -4,17 +4,27 @@ import UploadZone from '../components/UploadZone';
 import {
   listPapers,
   indexPapers,
+  rebuildIndex,
   getIndexedPapers,
   getPaperStats,
   deletePaper,
   type PaperInfo,
   type IndexedPaper,
 } from '../hooks/useApi';
+import { getErrorMessage } from '../utils/errors';
 
 export default function LibraryPage() {
   const [papers, setPapers] = useState<PaperInfo[]>([]);
   const [indexed, setIndexed] = useState<IndexedPaper[]>([]);
-  const [stats, setStats] = useState<{ num_papers: number; num_chunks: number; index_built: boolean } | null>(null);
+  const [stats, setStats] = useState<{
+    num_papers: number;
+    num_chunks: number;
+    index_built: boolean;
+    index_ready: boolean;
+    rebuild_required: boolean;
+    indexed_files: string[];
+    index_config_hash: string;
+  } | null>(null);
   const [indexing, setIndexing] = useState(false);
   const [indexResult, setIndexResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +43,7 @@ export default function LibraryPage() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    void Promise.resolve().then(refresh);
   }, [refresh]);
 
   const [indexProgress, setIndexProgress] = useState<{
@@ -41,6 +51,17 @@ export default function LibraryPage() {
     total: number;
     paper: string;
   } | null>(null);
+  const canRebuild = !indexing && Boolean(stats?.index_ready || stats?.rebuild_required || papers.length > 0);
+  const indexedFileNames = new Set(
+    indexed.flatMap((paper) => [paper.file_location, paper.filename].filter(Boolean))
+  );
+  const indexedLocalCount = papers.filter((paper) => indexedFileNames.has(paper.filename)).length;
+  const pendingLocalCount = Math.max(papers.length - indexedLocalCount, 0);
+  const indexButtonLabel = indexing
+    ? 'Indexation...'
+    : indexedLocalCount > 0 && pendingLocalCount > 0
+      ? `Continuer (${pendingLocalCount})`
+      : 'Indexer tout';
 
   const handleIndex = async () => {
     setIndexing(true);
@@ -48,7 +69,7 @@ export default function LibraryPage() {
     setIndexProgress(null);
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:8000/api/papers/ws/index`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/api/papers/ws/index`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -87,12 +108,28 @@ export default function LibraryPage() {
           `Indexé ${result.indexed.length} papiers — ${result.total_chunks} chunks`
         );
         await refresh();
-      } catch (err: any) {
-        setIndexResult(`Erreur: ${err.message || 'Indexation échouée'}`);
+      } catch (err: unknown) {
+        setIndexResult(`Erreur: ${getErrorMessage(err, 'Indexation échouée')}`);
       }
     }
     setIndexing(false);
     setIndexProgress(null);
+  };
+
+  const handleRebuild = async () => {
+    setIndexing(true);
+    setIndexResult(null);
+    setIndexProgress(null);
+    try {
+      const result = await rebuildIndex();
+      setIndexResult(
+        `Index reconstruit: ${result.indexed.length} papiers — ${result.total_chunks} chunks`
+      );
+      await refresh();
+    } catch (err: unknown) {
+      setIndexResult(`Erreur: ${getErrorMessage(err, 'Reconstruction échouée')}`);
+    }
+    setIndexing(false);
   };
 
   const handleDelete = async (filename: string) => {
@@ -115,14 +152,26 @@ export default function LibraryPage() {
           </p>
         </div>
 
-        <button
-          onClick={handleIndex}
-          disabled={indexing || papers.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${indexing ? 'animate-spin' : ''}`} />
-          {indexing ? 'Indexation...' : 'Indexer tout'}
-        </button>
+        <div className="flex items-center gap-2">
+          {stats?.rebuild_required && (
+            <button
+              onClick={handleRebuild}
+              disabled={!canRebuild}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${indexing ? 'animate-spin' : ''}`} />
+              Reconstruire
+            </button>
+          )}
+          <button
+            onClick={handleIndex}
+            disabled={indexing || papers.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${indexing ? 'animate-spin' : ''}`} />
+            {indexButtonLabel}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -131,6 +180,12 @@ export default function LibraryPage() {
           <StatCard icon={FileText} label="PDFs" value={papers.length} />
           <StatCard icon={Database} label="Papiers indexés" value={stats.num_papers} />
           <StatCard icon={HardDrive} label="Chunks" value={stats.num_chunks} />
+        </div>
+      )}
+
+      {pendingLocalCount > 0 && indexedLocalCount > 0 && !stats?.rebuild_required && (
+        <div className="px-4 py-3 rounded-lg text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+          Indexation partielle détectée: cliquez sur Continuer pour ajouter les PDFs restants sans réindexer ceux déjà synchronisés.
         </div>
       )}
 
@@ -165,6 +220,12 @@ export default function LibraryPage() {
         </div>
       )}
 
+      {stats?.rebuild_required && (
+        <div className="px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+          La configuration d'indexation a changé. Reconstruisez l'index avant de poser des questions.
+        </div>
+      )}
+
       {/* Upload zone */}
       <UploadZone onUploaded={refresh} />
 
@@ -183,9 +244,7 @@ export default function LibraryPage() {
         ) : (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
             {papers.map((paper) => {
-              const isIndexed = indexed.some(
-                (i) => i.docname.includes(paper.filename.replace('.pdf', ''))
-              );
+              const isIndexed = indexedFileNames.has(paper.filename);
               return (
                 <div
                   key={paper.filename}

@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import logging
 import pathlib
-import shutil
 from typing import Any
 
 from .config import get_papers_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_pdf_path(filename: str) -> pathlib.Path:
+    """Resolve a user-provided PDF filename inside the papers directory."""
+    safe_name = pathlib.Path(filename).name
+    if not safe_name or not safe_name.lower().endswith(".pdf"):
+        raise ValueError("Only PDF files are accepted")
+
+    papers_dir = get_papers_dir()
+    candidate = (papers_dir / safe_name).resolve()
+    if candidate.parent != papers_dir.resolve():
+        raise ValueError("Invalid PDF filename")
+    return candidate
 
 
 def list_papers() -> list[dict[str, Any]]:
@@ -42,15 +54,15 @@ async def save_uploaded_pdf(filename: str, content: bytes) -> pathlib.Path:
     Returns:
         Path to the saved file.
     """
-    papers_dir = get_papers_dir()
-    dest = papers_dir / filename
+    dest = _safe_pdf_path(filename)
+    safe_name = dest.name
 
     # Avoid overwriting — append number if exists
     counter = 1
     while dest.exists():
-        stem = pathlib.Path(filename).stem
-        suffix = pathlib.Path(filename).suffix
-        dest = papers_dir / f"{stem}_{counter}{suffix}"
+        stem = pathlib.Path(safe_name).stem
+        suffix = pathlib.Path(safe_name).suffix
+        dest = dest.parent / f"{stem}_{counter}{suffix}"
         counter += 1
 
     dest.write_bytes(content)
@@ -67,8 +79,10 @@ def delete_paper(filename: str) -> bool:
     Returns:
         True if deleted, False if not found.
     """
-    papers_dir = get_papers_dir()
-    pdf_path = papers_dir / filename
+    try:
+        pdf_path = _safe_pdf_path(filename)
+    except ValueError:
+        return False
 
     if not pdf_path.exists():
         return False

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Save, CheckCircle, AlertCircle, Key, Cpu, Sliders } from 'lucide-react';
 import { getSettings, updateSettings, type AppSettings } from '../hooks/useApi';
+import { getErrorMessage } from '../utils/errors';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -17,11 +18,7 @@ export default function SettingsPage() {
   const [googleKey, setGoogleKey] = useState('');
   const [perplexityKey, setPerplexityKey] = useState('');
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
       const s = await getSettings();
@@ -34,7 +31,11 @@ export default function SettingsPage() {
       console.error('Failed to load settings:', err);
     }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadSettings);
+  }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -55,8 +56,8 @@ export default function SettingsPage() {
       setGoogleKey('');
       setPerplexityKey('');
       setMessage({ type: 'success', text: 'Paramètres sauvegardés' });
-    } catch (err: any) {
-      setMessage({ type: 'error', text: `Erreur: ${err.message || 'Sauvegarde échouée'}` });
+    } catch (err: unknown) {
+      setMessage({ type: 'error', text: `Erreur: ${getErrorMessage(err, 'Sauvegarde échouée')}` });
     }
     setSaving(false);
   };
@@ -97,7 +98,7 @@ export default function SettingsPage() {
       <Section icon={Cpu} title="Modèles">
         <Field label="LLM Générateur" value={llm} onChange={setLlm} hint="Pour les réponses (ex: gpt-5, claude-opus-4.6-20250514)" />
         <Field label="LLM Résumé" value={summaryLlm} onChange={setSummaryLlm} hint="Pour résumer les preuves" />
-        <Field label="Embedding" value={embedding} onChange={setEmbedding} hint="Modèle d'embedding (ex: text-embedding-3-large)" />
+        <Field label="Embedding" value={embedding} onChange={setEmbedding} hint="Local CUDA rapide: st-multi-qa-MiniLM-L6-cos-v1. OpenAI possible: text-embedding-3-large" />
         <Field label="LLM Enrichissement (Vision)" value={enrichmentLlm} onChange={setEnrichmentLlm} hint="Pour OCR + description d'images (ex: gemini/gemini-3-pro)" />
       </Section>
 

@@ -38,16 +38,24 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
     setQuestion('');
   };
 
-  const togglePaper = (docname: string) => {
+  const togglePaper = (fileLocation: string) => {
     setSelectedPapers((prev) =>
-      prev.includes(docname) ? prev.filter((d) => d !== docname) : [...prev, docname]
+      prev.includes(fileLocation) ? prev.filter((d) => d !== fileLocation) : [...prev, fileLocation]
     );
   };
 
-  const formatDocname = (docname: string): string => {
+  const formatDocname = (docname?: string, filename?: string, title?: string | null, year?: number | null): string => {
+    if (title && year) return `${title.slice(0, 30)}${title.length > 30 ? '…' : ''} (${year})`;
+    if (filename) return filename.length > 30 ? filename.slice(0, 30) + '…' : filename;
+    if (!docname) return '';
     const m = docname.match(/^([a-z]+)(\d{4})/i);
     if (m) return `${m[1].charAt(0).toUpperCase() + m[1].slice(1)} ${m[2]}`;
     return docname.length > 30 ? docname.slice(0, 30) + '…' : docname;
+  };
+
+  const paperLabel = (fileLocation: string): string => {
+    const paper = papers.find((p) => p.file_location === fileLocation);
+    return paper ? formatDocname(paper.docname, paper.filename, paper.title, paper.year) : fileLocation;
   };
 
   return (
@@ -60,7 +68,7 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
               key={docname}
               className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs rounded-full"
             >
-              {formatDocname(docname)}
+              {paperLabel(docname)}
               <button
                 type="button"
                 onClick={() => togglePaper(docname)}
@@ -113,19 +121,19 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
                   <button
                     key={paper.dockey}
                     type="button"
-                    onClick={() => togglePaper(paper.docname)}
+                    onClick={() => togglePaper(paper.file_location)}
                     className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 ${
-                      selectedPapers.includes(paper.docname)
+                      selectedPapers.includes(paper.file_location)
                         ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
                         : 'text-gray-700 dark:text-gray-300'
                     }`}
                   >
                     <span className={`w-3 h-3 rounded border flex-shrink-0 ${
-                      selectedPapers.includes(paper.docname)
+                      selectedPapers.includes(paper.file_location)
                         ? 'bg-amber-500 border-amber-500'
                         : 'border-gray-300 dark:border-gray-600'
                     }`} />
-                    <span className="truncate">{formatDocname(paper.docname)}</span>
+                    <span className="truncate">{formatDocname(paper.docname, paper.filename, paper.title, paper.year)}</span>
                   </button>
                 ))}
               </div>

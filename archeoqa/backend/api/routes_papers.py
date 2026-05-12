@@ -64,8 +64,11 @@ async def index_papers():
     and stores them for Q&A.
     """
     service = get_qa_service()
-    indexed = await service.index_papers()
-    stats = service.get_stats()
+    try:
+        indexed = await service.index_papers()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    stats = await service.get_stats()
 
     return IndexResponse(
         indexed=indexed,
@@ -78,14 +81,28 @@ async def index_papers():
 async def get_indexed_papers():
     """List papers that have been indexed (parsed + embedded)."""
     service = get_qa_service()
-    return service.get_indexed_papers()
+    return await service.get_indexed_papers()
 
 
 @router.get("/stats")
 async def get_stats():
     """Get indexing stats."""
     service = get_qa_service()
-    return service.get_stats()
+    return await service.get_stats()
+
+
+@router.post("/rebuild", response_model=IndexResponse)
+async def rebuild_index():
+    """Fully rebuild the PaperQA index for the current settings."""
+    service = get_qa_service()
+    indexed = await service.rebuild_index()
+    stats = await service.get_stats()
+
+    return IndexResponse(
+        indexed=indexed,
+        total_papers=stats["num_papers"],
+        total_chunks=stats["num_chunks"],
+    )
 
 
 @router.delete("/{filename}")
@@ -98,7 +115,13 @@ async def remove_paper(filename: str):
     if not delete_paper(filename):
         raise HTTPException(status_code=404, detail=f"Paper {filename} not found")
 
-    return {"message": f"Deleted {filename}", "note": "Re-index to update the search index"}
+    service = get_qa_service()
+    try:
+        await service.index_papers()
+    except RuntimeError:
+        return {"message": f"Deleted {filename}", "note": "Rebuild required"}
+
+    return {"message": f"Deleted {filename}", "note": "Index synchronized"}
 
 
 @router.websocket("/ws/index")
@@ -142,7 +165,7 @@ async def index_websocket(websocket: WebSocket):
             asyncio.create_task(send_status(status))
 
         indexed = await service.index_papers(on_status=on_status)
-        stats = service.get_stats()
+        stats = await service.get_stats()
 
         await websocket.send_json({
             "type": "done",

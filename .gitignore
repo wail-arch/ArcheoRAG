@@ -11,6 +11,9 @@
 !/.gitignore
 !/README.md
 !/LICENSE
+!/AGENTS.md
+!/HANDOFF.md
+!/VIBE_CODING.md
 
 # ------ KEEP the archeoqa project folder ------
 !/archeoqa/
@@ -33,6 +36,9 @@ venv/
 archeoqa/data/papers/*.pdf
 archeoqa/data/docs_cache.pkl
 archeoqa/data/settings.json
+archeoqa/data/index_metadata.json
+archeoqa/data/indexes/
+archeoqa/data/analysis/*.json
 
 # ------ Node / Frontend ------
 node_modules/
