@@ -96,7 +96,7 @@ export default function SettingsPage() {
 
       {/* Models section */}
       <Section icon={Cpu} title="Modèles">
-        <Field label="LLM Générateur" value={llm} onChange={setLlm} hint="Pour les réponses (ex: gpt-5, claude-opus-4.6-20250514)" />
+        <Field label="LLM Générateur" value={llm} onChange={setLlm} hint="Pour les réponses (ex: gpt-5.2)" />
         <Field label="LLM Résumé" value={summaryLlm} onChange={setSummaryLlm} hint="Pour résumer les preuves" />
         <Field label="Embedding" value={embedding} onChange={setEmbedding} hint="Local CUDA rapide: st-multi-qa-MiniLM-L6-cos-v1. OpenAI possible: text-embedding-3-large" />
         <Field label="LLM Enrichissement (Vision)" value={enrichmentLlm} onChange={setEnrichmentLlm} hint="Pour OCR + description d'images (ex: gemini/gemini-3-pro)" />
