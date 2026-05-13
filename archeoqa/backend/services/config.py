@@ -169,11 +169,13 @@ def get_settings() -> Settings:
     _google_key = os.getenv("GOOGLE_API_KEY", "")
     _has_google_key = bool(_google_key) and _google_key not in ("...", "your-key-here", "")
 
-    parsing_kwargs: dict[str, Any] = {
-        "use_doc_details": True,
-        "chunk_size": int(overrides.get("chunk_size", 5000)),
-        "overlap": int(overrides.get("overlap", 250)),
-    }
+    parsing_kwargs: dict[str, Any] = {}
+    if _field_supported(ParsingSettings, "use_doc_details"):
+        parsing_kwargs["use_doc_details"] = True
+    if _field_supported(ParsingSettings, "chunk_size"):
+        parsing_kwargs["chunk_size"] = int(overrides.get("chunk_size", 5000))
+    if _field_supported(ParsingSettings, "overlap"):
+        parsing_kwargs["overlap"] = int(overrides.get("overlap", 250))
     if _field_supported(ParsingSettings, "enrichment_llm"):
         parsing_kwargs["enrichment_llm"] = enrichment_llm if _has_google_key else "gpt-5.2"
     if _field_supported(ParsingSettings, "enrichment_llm_config"):
