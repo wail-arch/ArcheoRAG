@@ -166,6 +166,39 @@ class QAService:
             if file_hash != FAILED_DOCUMENT_ADD_ID
         }
 
+    async def _failed_index_files(self) -> dict[str, str]:
+        """Return files PaperQA marked as failed during a previous index run."""
+        index_files = dict(await self._search_index().index_files)
+        return {
+            file_location: file_hash
+            for file_location, file_hash in index_files.items()
+            if file_hash == FAILED_DOCUMENT_ADD_ID
+        }
+
+    async def _clear_failed_index_entries(self, papers_dir: pathlib.Path) -> list[str]:
+        """Remove failed markers so incremental indexing can retry those PDFs.
+
+        PaperQA stores failed additions in the managed index as `ERROR`. Its
+        normal filecheck treats that as an existing entry, so a later sync skips
+        the file instead of retrying it. ArcheoQA's "continue indexing" should
+        retry local failed PDFs, while still leaving truly indexed files intact.
+        """
+        search_index = self._search_index()
+        failed_files = dict(await self._failed_index_files())
+        retried: list[str] = []
+
+        for file_location in failed_files:
+            candidate = papers_dir / file_location
+            if candidate.exists() and candidate.is_file():
+                await search_index.remove_from_index(file_location)
+                retried.append(file_location)
+
+        if retried:
+            await search_index.save_index()
+            logger.info("Cleared failed PaperQA index entries for retry: %s", retried)
+
+        return retried
+
     async def is_rebuild_required(self) -> bool:
         """Return True when an existing index was built with stale settings."""
         index_ready = bool(await self._index_files())
@@ -552,6 +585,16 @@ class QAService:
                 )
             )
 
+        retried_failed = await self._clear_failed_index_entries(papers_dir)
+        if retried_failed and on_status:
+            on_status(
+                QAStatus(
+                    stage="indexing",
+                    message=f"Retrying {len(retried_failed)} failed PDF(s)",
+                    progress=0.0,
+                )
+            )
+
         await get_directory_index(settings=self.settings, build=True)
         self._save_index_metadata()
         indexed = await self.get_indexed_papers()
@@ -731,6 +774,7 @@ class QAService:
         """Get current service stats."""
         indexed = await self.get_indexed_papers()
         query_docs = await self._load_docs_from_index()
+        failed_files = sorted((await self._failed_index_files()).keys())
         current_hash = self.get_index_config_hash()
         index_ready = bool(indexed)
         return {
@@ -740,6 +784,7 @@ class QAService:
             "index_ready": index_ready,
             "rebuild_required": await self.is_rebuild_required(),
             "indexed_files": [paper["file_location"] for paper in indexed],
+            "failed_files": failed_files,
             "index_config_hash": current_hash,
             "papers_dir": str(get_papers_dir()),
         }

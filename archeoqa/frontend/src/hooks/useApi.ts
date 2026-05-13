@@ -132,6 +132,7 @@ export function getPaperStats(): Promise<{
   index_ready: boolean;
   rebuild_required: boolean;
   indexed_files: string[];
+  failed_files: string[];
   index_config_hash: string;
   papers_dir: string;
 }> {

@@ -23,6 +23,7 @@ export default function LibraryPage() {
     index_ready: boolean;
     rebuild_required: boolean;
     indexed_files: string[];
+    failed_files: string[];
     index_config_hash: string;
   } | null>(null);
   const [indexing, setIndexing] = useState(false);
@@ -55,12 +56,16 @@ export default function LibraryPage() {
   const indexedFileNames = new Set(
     indexed.flatMap((paper) => [paper.file_location, paper.filename].filter(Boolean))
   );
+  const failedFileNames = new Set(stats?.failed_files ?? []);
   const indexedLocalCount = papers.filter((paper) => indexedFileNames.has(paper.filename)).length;
   const pendingLocalCount = Math.max(papers.length - indexedLocalCount, 0);
+  const failedLocalCount = papers.filter((paper) => failedFileNames.has(paper.filename)).length;
   const indexButtonLabel = indexing
     ? 'Indexation...'
-    : indexedLocalCount > 0 && pendingLocalCount > 0
-      ? `Continuer (${pendingLocalCount})`
+    : failedLocalCount > 0
+      ? `Réessayer (${failedLocalCount})`
+      : indexedLocalCount > 0 && pendingLocalCount > 0
+        ? `Continuer (${pendingLocalCount})`
       : 'Indexer tout';
 
   const handleIndex = async () => {
@@ -185,7 +190,13 @@ export default function LibraryPage() {
 
       {pendingLocalCount > 0 && indexedLocalCount > 0 && !stats?.rebuild_required && (
         <div className="px-4 py-3 rounded-lg text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-          Indexation partielle détectée: cliquez sur Continuer pour ajouter les PDFs restants sans réindexer ceux déjà synchronisés.
+          Indexation partielle détectée: cliquez sur {failedLocalCount > 0 ? 'Réessayer' : 'Continuer'} pour traiter les PDFs restants sans réindexer ceux déjà synchronisés.
+        </div>
+      )}
+
+      {failedLocalCount > 0 && !stats?.rebuild_required && (
+        <div className="px-4 py-3 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+          {failedLocalCount} PDF en échec d'indexation. Le prochain clic sur Réessayer purge l'entrée en erreur et retente uniquement ce fichier.
         </div>
       )}
 
@@ -245,6 +256,7 @@ export default function LibraryPage() {
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
             {papers.map((paper) => {
               const isIndexed = indexedFileNames.has(paper.filename);
+              const hasFailed = failedFileNames.has(paper.filename);
               return (
                 <div
                   key={paper.filename}
@@ -260,6 +272,9 @@ export default function LibraryPage() {
                         {paper.size_mb} MB
                         {isIndexed && (
                           <span className="ml-2 text-green-600">● Indexé</span>
+                        )}
+                        {hasFailed && (
+                          <span className="ml-2 text-red-500">● Échec</span>
                         )}
                       </p>
                     </div>
