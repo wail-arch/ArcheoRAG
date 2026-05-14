@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { Send, Bot, Filter, X, GitCompareArrows } from 'lucide-react';
 import { getIndexedPapers, type IndexedPaper } from '../hooks/useApi';
 
@@ -68,6 +68,23 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
   const paperLabel = (fileLocation: string): string => {
     const paper = papers.find((p) => p.file_location === fileLocation);
     return paper ? formatDocname(paper.docname, paper.filename, paper.title, paper.year) : fileLocation;
+  };
+
+  const sortedPapers = useMemo(
+    () =>
+      [...papers].sort((a, b) =>
+        formatDocname(a.docname, a.filename, a.title, a.year).localeCompare(
+          formatDocname(b.docname, b.filename, b.title, b.year),
+          'fr',
+          { sensitivity: 'base' }
+        )
+      ),
+    [papers]
+  );
+
+  const fullPaperLabel = (paper: IndexedPaper): string => {
+    const title = paper.title || paper.filename || paper.docname;
+    return `${title}${paper.year ? ` (${paper.year})` : ''}`;
   };
 
   return (
@@ -143,31 +160,34 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
             </button>
 
             {showFilter && (
-              <div className="absolute bottom-full left-0 mb-2 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-64 overflow-y-auto z-50">
-                <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+              <div className="absolute bottom-full left-0 mb-2 w-[min(720px,calc(100vw-2rem))] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-50">
+                <div className="p-3 border-b border-gray-200 dark:border-gray-700">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase px-2">
                     Filtrer par papier
                   </p>
                 </div>
-                {papers.map((paper) => (
-                  <button
-                    key={paper.dockey}
-                    type="button"
-                    onClick={() => togglePaper(paper.file_location)}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 ${
-                      selectedPapers.includes(paper.file_location)
-                        ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
-                        : 'text-gray-700 dark:text-gray-300'
-                    }`}
-                  >
-                    <span className={`w-3 h-3 rounded border flex-shrink-0 ${
-                      selectedPapers.includes(paper.file_location)
-                        ? 'bg-amber-500 border-amber-500'
-                        : 'border-gray-300 dark:border-gray-600'
-                    }`} />
-                    <span className="truncate">{formatDocname(paper.docname, paper.filename, paper.title, paper.year)}</span>
-                  </button>
-                ))}
+                <div className="max-h-[55vh] overflow-y-auto py-1">
+                  {sortedPapers.map((paper) => (
+                    <button
+                      key={paper.dockey}
+                      type="button"
+                      title={fullPaperLabel(paper)}
+                      onClick={() => togglePaper(paper.file_location)}
+                      className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-start gap-3 ${
+                        selectedPapers.includes(paper.file_location)
+                          ? 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      <span className={`w-3.5 h-3.5 mt-0.5 rounded border flex-shrink-0 ${
+                        selectedPapers.includes(paper.file_location)
+                          ? 'bg-amber-500 border-amber-500'
+                          : 'border-gray-300 dark:border-gray-600'
+                      }`} />
+                      <span className="leading-snug line-clamp-2">{formatDocname(paper.docname, paper.filename, paper.title, paper.year)}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
