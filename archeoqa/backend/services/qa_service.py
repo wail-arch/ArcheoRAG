@@ -437,6 +437,137 @@ class QAService:
             deduped.append(ctx)
         return deduped
 
+    def _context_quality_penalty(self, ctx: Any) -> int:
+        """Score contexts that look like bibliography/reference pages."""
+        text = " ".join(
+            [
+                str(getattr(ctx, "context", "")),
+                str(getattr(getattr(ctx, "text", None), "text", "")),
+            ]
+        ).lower()
+        penalty = 0
+
+        bibliography_markers = (
+            "references",
+            "bibliography",
+            "works cited",
+            "références",
+            "bibliographie",
+            "liste de références",
+            "list of references",
+            "ne fournit pas de contenu scientifique",
+            "ne contient pas de contenu scientifique",
+            "ne contient pas d'éléments de contenu scientifique",
+            "ne contient pas d’éléments de contenu scientifique",
+            "ne contient pas d'elements de contenu scientifique",
+            "ne contient pas de résultats",
+            "ne contient pas de resultats",
+            "ne contient pas de méthodes",
+            "ne contient pas de methodes",
+            "ne présente pas directement",
+            "ne donne pas d'hypothèses",
+            "ne donne pas d’hypothèses",
+            "ne donne pas d'hypotheses",
+            "contient surtout la bibliographie",
+            "surtout la bibliographie",
+            "informations bibliographiques",
+            "métadonnées bibliographiques",
+            "metadonnees bibliographiques",
+            "essentiellement de métadonnées bibliographiques",
+            "essentiellement de metadonnees bibliographiques",
+            "surtout des informations bibliographiques",
+            "fournit surtout des informations bibliographiques",
+            "correspond essentiellement à la bibliographie",
+            "aucune information méthodologique",
+            "aucune information methodologique",
+        )
+        substantive_markers = (
+            "hypoth",
+            "method",
+            "méthod",
+            "result",
+            "résultat",
+            "preuve",
+            "evidence",
+            "datation",
+            "période",
+            "period",
+            "limit",
+            "incertitude",
+            "discussion",
+            "conclu",
+            "suggest",
+            "propos",
+            "admixture",
+            "aDNA".lower(),
+            "mtdna",
+            "autosomal",
+            "chronolog",
+        )
+
+        penalty += sum(3 for marker in bibliography_markers if marker in text)
+        if any(marker in text for marker in bibliography_markers):
+            penalty += 2
+        penalty += min(len(re.findall(r"\bdoi\b|https?://|www\.", text)), 6)
+        penalty += 2 if len(re.findall(r"\b(?:19|20)\d{2}\b", text)) >= 12 else 0
+        penalty += 2 if len(re.findall(r"\bet\s+al\.|\bdoi:|\burl:", text)) >= 5 else 0
+        score = getattr(ctx, "score", None)
+        if isinstance(score, int | float):
+            if score <= 1:
+                penalty += 4
+            elif score <= 3:
+                penalty += 2
+        penalty -= min(sum(1 for marker in substantive_markers if marker in text), 4)
+        return penalty
+
+    def _filter_low_quality_comparison_contexts(
+        self,
+        contexts: list[Any],
+    ) -> tuple[list[Any], list[dict[str, Any]]]:
+        """Drop likely bibliography contexts only when safer alternatives exist."""
+        by_docname: dict[str, list[Any]] = {}
+        for ctx in contexts:
+            docname = str(getattr(ctx.text.doc, "docname", ""))
+            by_docname.setdefault(docname, []).append(ctx)
+
+        kept: list[Any] = []
+        dropped: list[dict[str, Any]] = []
+        min_per_paper = 2
+
+        for docname, paper_contexts in by_docname.items():
+            if len(paper_contexts) <= min_per_paper:
+                kept.extend(paper_contexts)
+                continue
+
+            scored = [
+                (self._context_quality_penalty(ctx), idx, ctx)
+                for idx, ctx in enumerate(paper_contexts)
+            ]
+            low_quality = [
+                item for item in scored if item[0] >= 6
+            ]
+            keep_ids = {id(ctx) for _, _, ctx in scored}
+            removable = max(0, len(paper_contexts) - min_per_paper)
+
+            for penalty, _, ctx in sorted(low_quality, key=lambda item: item[0], reverse=True):
+                if removable <= 0:
+                    break
+                keep_ids.remove(id(ctx))
+                removable -= 1
+                dropped.append(
+                    {
+                        "docname": docname,
+                        "name": str(getattr(ctx.text, "name", "")),
+                        "score": getattr(ctx, "score", None),
+                        "quality_penalty": penalty,
+                        "reason": "likely_bibliography_or_references",
+                    }
+                )
+
+            kept.extend([ctx for ctx in paper_contexts if id(ctx) in keep_ids])
+
+        return kept, dropped
+
     async def _gather_balanced_comparison_contexts(
         self,
         question: str,
@@ -445,6 +576,7 @@ class QAService:
     ) -> tuple[
         list[Any],
         dict[str, int],
+        list[dict[str, Any]],
         list[dict[str, Any]],
         dict[str, list[int]],
         float,
@@ -512,10 +644,16 @@ class QAService:
             )
             cost += paper_session.cost
 
+        deduped_contexts = self._dedupe_context_objects(contexts)
+        filtered_contexts, dropped_low_quality = (
+            self._filter_low_quality_comparison_contexts(deduped_contexts)
+        )
+
         return (
-            self._dedupe_context_objects(contexts),
+            filtered_contexts,
             per_paper_counts,
             partial_papers,
+            dropped_low_quality,
             token_counts,
             cost,
         )
@@ -650,6 +788,7 @@ class QAService:
             balanced_contexts,
             per_paper_counts,
             partial_papers,
+            dropped_low_quality,
             gather_token_counts,
             gather_cost,
         ) = await self._gather_balanced_comparison_contexts(
@@ -724,6 +863,8 @@ class QAService:
                     "comparison_strategy": "per_paper_evidence_then_synthesis",
                     "per_paper_context_counts": per_paper_counts,
                     "partial_papers": partial_papers,
+                    "context_quality_filter": "bibliography_reference_heuristic",
+                    "dropped_low_quality_contexts": dropped_low_quality,
                 },
             ),
         )

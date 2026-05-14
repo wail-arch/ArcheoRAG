@@ -67,6 +67,8 @@ export interface TargetingInfo {
   comparison_strategy?: string;
   per_paper_context_counts?: Record<string, number>;
   partial_papers?: Array<{ label: string; file_location: string; reason: string; context_count?: number }>;
+  context_quality_filter?: string;
+  dropped_low_quality_contexts?: Array<{ docname: string; name: string; score?: number; quality_penalty: number; reason: string }>;
   cleaned_internal_ids?: boolean;
   warnings?: string[];
   out_of_scope_contexts?: Array<{ docname: string; name: string }>;
