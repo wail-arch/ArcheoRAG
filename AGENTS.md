@@ -20,12 +20,14 @@ ArcheoRAG is a local archaeology research assistant built on PaperQA2. PaperQA r
 - Main QA service: `archeoqa/backend/services/qa_service.py`.
 - Paper resolver: `archeoqa/backend/services/paper_resolver.py`.
 - Evidence Matrix service: `archeoqa/backend/services/analysis_service.py`.
+- Selected-paper comparisons use a balanced per-paper retrieval path in `qa_service.py`: gather evidence separately for each selected/resolved paper, keep sources isolated to those papers, then synthesize the final comparison.
+- The balanced comparison path has a conservative context-quality filter to drop bibliography/reference-like contexts only when enough better contexts remain for the same paper.
 
 ## Development Commands
 Backend:
 ```powershell
 cd C:\Users\Wail\Desktop\archeorag
-py -3 -m uvicorn archeoqa.backend.app:app --reload --port 8000
+.\archeoqa\.venv\Scripts\python.exe -m uvicorn archeoqa.backend.app:app --reload --port 8000
 ```
 
 Frontend:
@@ -36,7 +38,7 @@ npm run dev
 
 Validation:
 ```powershell
-py -3 -m compileall archeoqa\backend
+.\archeoqa\.venv\Scripts\python.exe -m compileall archeoqa\backend
 cd archeoqa\frontend
 npm run lint
 npm run build
@@ -46,6 +48,7 @@ npm run build
 - Local embedding defaults to `st-multi-qa-MiniLM-L6-cos-v1` with CUDA when available.
 - PaperQA managed directory index is used; later Index All runs should sync/skip unchanged papers.
 - Full rebuild is only for changed indexing config or explicit rebuild.
+- Use the project venv for backend commands; using a different Python/PaperQA install can make the app report that the index must be rebuilt even when the index is valid.
 
 ## Product Direction
 The next research features should build on the Evidence Matrix instead of rereading PDFs repeatedly:
@@ -53,4 +56,3 @@ The next research features should build on the Evidence Matrix instead of reread
 - Similarity Finder
 - Difference Finder
 - Contradiction Detector
-- Dedicated Compare Selected Papers workflow
