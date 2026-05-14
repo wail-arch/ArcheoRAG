@@ -369,6 +369,157 @@ class QAService:
             "- Cite les affirmations avec des références courtes, par exemple \"Pereira 2010 p. 7-8\"; évite de répéter la même citation plusieurs fois dans une même cellule.\n"
         )
 
+    def _per_paper_comparison_question(
+        self,
+        question: str,
+        paper: dict[str, Any],
+    ) -> str:
+        """Create the evidence-gathering question used for one selected paper."""
+        label = paper.get("label") or paper.get("docname") or paper.get("filename")
+        title = paper.get("title") or paper.get("filename")
+        return (
+            "Pour préparer une comparaison entre papiers, extrais uniquement les "
+            f"éléments du papier {label} — {title} utiles pour répondre à cette "
+            f"question: {question}\n\n"
+            "Cherche les hypothèses, preuves, méthodes/données, datations/périodes, "
+            "limites/incertitudes et divergences potentielles. Ne réponds pas depuis "
+            "tes connaissances générales; résume seulement ce qui est documenté dans "
+            "ce papier."
+        )
+
+    def _comparison_context_budget(self, paper_count: int) -> int:
+        if paper_count <= 2:
+            return 5
+        if paper_count == 3:
+            return 4
+        return 3
+
+    def _settings_with_evidence_budget(
+        self,
+        evidence_k: int,
+        *,
+        answer_max_sources: int | None = None,
+    ) -> Settings:
+        """Return a per-query settings copy with a temporary evidence budget."""
+        settings = self.settings.model_copy(deep=True)
+        settings.answer.evidence_k = evidence_k
+        settings.answer.answer_max_sources = max(
+            settings.answer.answer_max_sources,
+            answer_max_sources or evidence_k,
+        )
+        return settings
+
+    def _merge_token_counts(
+        self,
+        base: dict[str, list[int]],
+        extra: dict[str, list[int]],
+    ) -> dict[str, list[int]]:
+        merged = {model: values[:] for model, values in base.items()}
+        for model, values in extra.items():
+            if model not in merged:
+                merged[model] = values[:]
+            else:
+                merged[model][0] += values[0]
+                merged[model][1] += values[1]
+        return merged
+
+    def _dedupe_context_objects(self, contexts: list[Any]) -> list[Any]:
+        seen: set[tuple[str, str]] = set()
+        deduped: list[Any] = []
+        for ctx in contexts:
+            key = (
+                str(getattr(ctx.text.doc, "docname", "")),
+                str(getattr(ctx.text, "name", "")),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(ctx)
+        return deduped
+
+    async def _gather_balanced_comparison_contexts(
+        self,
+        question: str,
+        targeting: TargetingResult,
+        on_status: Callable[[QAStatus], Any] | None = None,
+    ) -> tuple[
+        list[Any],
+        dict[str, int],
+        list[dict[str, Any]],
+        dict[str, list[int]],
+        float,
+    ]:
+        """Gather PaperQA evidence independently for each targeted paper."""
+        papers = targeting.resolved_papers
+        per_paper_k = self._comparison_context_budget(len(papers))
+        gather_settings = self._settings_with_evidence_budget(per_paper_k)
+        contexts: list[Any] = []
+        per_paper_counts: dict[str, int] = {}
+        partial_papers: list[dict[str, Any]] = []
+        token_counts: dict[str, list[int]] = {}
+        cost = 0.0
+
+        for index, paper in enumerate(papers, start=1):
+            label = str(
+                paper.get("label") or paper.get("docname") or paper.get("filename")
+            )
+            file_location = str(paper.get("file_location") or "")
+            if on_status:
+                on_status(
+                    QAStatus(
+                        stage="gathering",
+                        message=f"Gathering evidence for {label} ({index}/{len(papers)})",
+                        progress=index / max(len(papers), 1),
+                    )
+                )
+
+            paper_docs = await self._load_docs_from_index([file_location])
+            if not paper_docs.docs:
+                per_paper_counts[label] = 0
+                partial_papers.append(
+                    {
+                        "label": label,
+                        "file_location": file_location,
+                        "reason": "paper_not_loaded",
+                    }
+                )
+                continue
+
+            paper_session = PQASession(
+                question=self._per_paper_comparison_question(question, paper)
+            )
+            paper_session = await paper_docs.aget_evidence(
+                paper_session,
+                settings=gather_settings,
+            )
+            count = len(paper_session.contexts)
+            per_paper_counts[label] = count
+            contexts.extend(paper_session.contexts)
+
+            if count < max(1, per_paper_k // 2):
+                partial_papers.append(
+                    {
+                        "label": label,
+                        "file_location": file_location,
+                        "reason": "low_context_count",
+                        "context_count": count,
+                    }
+                )
+
+            token_counts = self._merge_token_counts(
+                token_counts,
+                paper_session.token_counts,
+            )
+            cost += paper_session.cost
+
+        return (
+            self._dedupe_context_objects(contexts),
+            per_paper_counts,
+            partial_papers,
+            token_counts,
+            cost,
+        )
+
     def _citation_aliases(self, targeting: TargetingResult) -> dict[str, str]:
         aliases: dict[str, str] = {}
         for paper in targeting.resolved_papers:
@@ -450,6 +601,7 @@ class QAService:
         answer_mode: str,
         cleaned_internal_ids: bool,
         out_of_scope_contexts: list[dict[str, Any]],
+        extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         metadata = targeting.to_public()
         warnings: list[str] = []
@@ -473,7 +625,108 @@ class QAService:
                 ],
             }
         )
+        if extra:
+            metadata.update(extra)
         return metadata
+
+    async def _answer_targeted_comparison_balanced(
+        self,
+        question: str,
+        docs: Docs,
+        targeting: TargetingResult,
+        on_status: Callable[[QAStatus], Any] | None = None,
+    ) -> QAResult:
+        """Compare targeted papers after gathering evidence per paper."""
+        if on_status:
+            on_status(
+                QAStatus(
+                    stage="gathering",
+                    message="Gathering balanced evidence by paper...",
+                    progress=0.0,
+                )
+            )
+
+        (
+            balanced_contexts,
+            per_paper_counts,
+            partial_papers,
+            gather_token_counts,
+            gather_cost,
+        ) = await self._gather_balanced_comparison_contexts(
+            question,
+            targeting,
+            on_status=on_status,
+        )
+
+        if on_status:
+            on_status(
+                QAStatus(
+                    stage="answering",
+                    message="Generating balanced comparative answer...",
+                    progress=1.0,
+                )
+            )
+
+        answer_question = self._comparison_prompt(question, targeting)
+        session = PQASession(question=answer_question)
+        session.contexts = balanced_contexts
+        final_settings = self._settings_with_evidence_budget(
+            self.settings.answer.evidence_k,
+            answer_max_sources=max(len(balanced_contexts), self.settings.answer.answer_max_sources),
+        )
+        final_settings.answer.get_evidence_if_no_contexts = False
+        session = await docs.aquery(
+            session,
+            settings=final_settings,
+        )
+        session.token_counts = self._merge_token_counts(
+            gather_token_counts,
+            session.token_counts,
+        )
+        session.cost += gather_cost
+
+        if on_status:
+            on_status(QAStatus(stage="done", message="Answer ready"))
+
+        contexts = [_serialize_context(ctx) for ctx in session.contexts]
+        answer, cleaned_internal_ids = self._clean_answer_text(session.answer, targeting)
+        out_of_scope = self._out_of_scope_contexts(contexts, targeting)
+        if out_of_scope:
+            allowed_docnames = {
+                str(paper.get("docname") or "").lower()
+                for paper in targeting.resolved_papers
+                if paper.get("docname")
+            }
+            contexts = [
+                ctx
+                for ctx in contexts
+                if str(
+                    ctx.get("text", {})
+                    .get("doc", {})
+                    .get("docname", "")
+                ).lower()
+                in allowed_docnames
+            ]
+
+        return QAResult(
+            answer=answer,
+            question=question,
+            contexts=contexts,
+            cost=session.cost,
+            token_counts=session.token_counts,
+            session_id=str(session.id),
+            targeting=self._targeting_metadata(
+                targeting,
+                answer_mode="targeted_comparison_balanced",
+                cleaned_internal_ids=cleaned_internal_ids,
+                out_of_scope_contexts=out_of_scope,
+                extra={
+                    "comparison_strategy": "per_paper_evidence_then_synthesis",
+                    "per_paper_context_counts": per_paper_counts,
+                    "partial_papers": partial_papers,
+                },
+            ),
+        )
 
     async def _answer_direct(
         self,
@@ -491,6 +744,14 @@ class QAService:
             )
 
         is_targeted_comparison = self._is_targeted_comparison(question, targeting)
+        if is_targeted_comparison and 2 <= len(targeting.resolved_papers) <= 5:
+            return await self._answer_targeted_comparison_balanced(
+                question,
+                docs,
+                targeting,
+                on_status=on_status,
+            )
+
         answer_question = (
             self._comparison_prompt(question, targeting)
             if is_targeted_comparison

@@ -63,7 +63,10 @@ export interface TargetingInfo {
   resolved_papers?: TargetingPaper[];
   unresolved_mentions?: string[];
   candidates?: Record<string, TargetingPaper[]>;
-  answer_mode?: 'targeted_comparison' | 'standard';
+  answer_mode?: 'targeted_comparison' | 'targeted_comparison_balanced' | 'standard';
+  comparison_strategy?: string;
+  per_paper_context_counts?: Record<string, number>;
+  partial_papers?: Array<{ label: string; file_location: string; reason: string; context_count?: number }>;
   cleaned_internal_ids?: boolean;
   warnings?: string[];
   out_of_scope_contexts?: Array<{ docname: string; name: string }>;

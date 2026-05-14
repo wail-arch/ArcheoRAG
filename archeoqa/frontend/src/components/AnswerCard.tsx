@@ -382,7 +382,8 @@ function TargetingNotice({ targeting }: { targeting?: TargetingInfo }) {
   const label = targeting.mode === 'manual_filter'
     ? 'Recherche limitée par filtre manuel'
     : 'Recherche limitée automatiquement';
-  const isStructured = targeting.answer_mode === 'targeted_comparison';
+  const isBalanced = targeting.answer_mode === 'targeted_comparison_balanced';
+  const isStructured = targeting.answer_mode === 'targeted_comparison' || isBalanced;
   const warnings = (targeting.warnings ?? []).filter((warning) => warning !== 'internal_ids_removed');
 
   return (
@@ -393,7 +394,7 @@ function TargetingNotice({ targeting }: { targeting?: TargetingInfo }) {
           <p className="font-semibold">{label}</p>
           {isStructured && (
             <p className="text-xs mt-1 font-medium">
-              Réponse comparative structurée
+              {isBalanced ? 'Réponse comparative équilibrée par papier' : 'Réponse comparative structurée'}
             </p>
           )}
           <p className="text-xs mt-1">
