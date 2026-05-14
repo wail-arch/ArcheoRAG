@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
-import { Send, Bot, Filter, X } from 'lucide-react';
+import { Send, Bot, Filter, X, GitCompareArrows } from 'lucide-react';
 import { getIndexedPapers, type IndexedPaper } from '../hooks/useApi';
 
 interface ChatInputProps {
@@ -14,6 +14,8 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
   const [selectedPapers, setSelectedPapers] = useState<string[]>([]);
   const [showFilter, setShowFilter] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const comparisonQuestion =
+    'Compare uniquement les papiers sélectionnés : quelles hypothèses proposent-ils, quelles preuves utilisent-ils, quelles méthodes/données mobilisent-ils, quelles périodes/datations discutent-ils, quelles limites présentent-ils, et où divergent-ils ?';
 
   useEffect(() => {
     getIndexedPapers().then(setPapers).catch(() => {});
@@ -36,6 +38,11 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
     if (!q || isLoading) return;
     onSubmit(q, useAgent, selectedPapers.length > 0 ? selectedPapers : undefined);
     setQuestion('');
+  };
+
+  const handleCompareSelected = () => {
+    if (isLoading || selectedPapers.length < 2 || selectedPapers.length > 5) return;
+    onSubmit(comparisonQuestion, useAgent, selectedPapers);
   };
 
   const togglePaper = (fileLocation: string) => {
@@ -84,6 +91,26 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
             className="text-xs text-gray-400 hover:text-red-500 px-1"
           >
             Tout effacer
+          </button>
+        </div>
+      )}
+
+      {selectedPapers.length >= 2 && (
+        <div className="flex items-center justify-end gap-2 mb-2 max-w-4xl mx-auto">
+          {selectedPapers.length > 5 && (
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              Sélectionnez 5 papiers maximum pour une comparaison lisible.
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleCompareSelected}
+            disabled={isLoading || selectedPapers.length > 5}
+            title="Comparer les papiers sélectionnés"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <GitCompareArrows className="w-4 h-4" />
+            Comparer
           </button>
         </div>
       )}
