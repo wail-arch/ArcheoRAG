@@ -42,7 +42,12 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
 
   const handleCompareSelected = () => {
     if (isLoading || selectedPapers.length < 2 || selectedPapers.length > 5) return;
-    onSubmit(comparisonQuestion, useAgent, selectedPapers);
+    const customQuestion = question.trim();
+    const q = customQuestion
+      ? `Compare uniquement les papiers sélectionnés sur cette question : ${customQuestion}`
+      : comparisonQuestion;
+    onSubmit(q, useAgent, selectedPapers);
+    if (customQuestion) setQuestion('');
   };
 
   const togglePaper = (fileLocation: string) => {
@@ -106,7 +111,7 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
             type="button"
             onClick={handleCompareSelected}
             disabled={isLoading || selectedPapers.length > 5}
-            title="Comparer les papiers sélectionnés"
+            title={question.trim() ? 'Comparer les papiers sélectionnés selon cette question' : 'Comparer les papiers sélectionnés'}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <GitCompareArrows className="w-4 h-4" />
@@ -206,6 +211,11 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
       {/* Status bar */}
       <div className="flex items-center gap-2 mt-2 max-w-4xl mx-auto text-xs text-gray-500 dark:text-gray-400">
         <span>{useAgent ? '🤖 Mode Agent (plus lent, plus précis)' : '⚡ Mode Direct (rapide)'}</span>
+        {selectedPapers.length >= 2 && selectedPapers.length <= 5 && (
+          <span className="hidden sm:inline text-gray-400 dark:text-gray-500">
+            Écrivez un angle puis cliquez Comparer, ou laissez vide pour une comparaison générale.
+          </span>
+        )}
         {selectedPapers.length > 0 && (
           <span className="ml-auto text-amber-600 dark:text-amber-400">
             {selectedPapers.length} papier{selectedPapers.length > 1 ? 's' : ''} sélectionné{selectedPapers.length > 1 ? 's' : ''}
