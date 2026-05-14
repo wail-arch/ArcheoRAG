@@ -290,9 +290,13 @@ class QAService:
             if not candidates:
                 continue
             labels = [
-                candidate.get("label")
-                or candidate.get("title")
-                or candidate.get("filename")
+                (
+                    f"{candidate.get('label')} — {candidate.get('title')}"
+                    if candidate.get("label") and candidate.get("title")
+                    else candidate.get("label")
+                    or candidate.get("title")
+                    or candidate.get("filename")
+                )
                 for candidate in candidates[:3]
             ]
             lines.append(f"Candidats pour « {mention} » : " + "; ".join(labels) + ".")

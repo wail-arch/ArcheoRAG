@@ -94,6 +94,36 @@ def _docname_author_year(docname: str) -> tuple[str | None, int | None]:
     return match.group(1), int(match.group(2))
 
 
+def _citation_first_author(citation: str) -> str:
+    """Return a best-effort first-author string from a citation."""
+    citation = citation or ""
+    comma_pos = citation.find(",")
+    period_pos = citation.find(".")
+    if comma_pos >= 0 and (period_pos < 0 or comma_pos < period_pos):
+        return citation[:comma_pos].strip()
+    if period_pos >= 0:
+        period_prefix = citation[:period_pos].strip()
+        prefix_parts = period_prefix.split()
+        # Prefer a sentence-ending period for citations like "Jacques François. ...",
+        # but avoid stopping on middle initials like "Mary E. Prendergast, ...".
+        if prefix_parts and not (
+            len(prefix_parts[-1]) == 1 and prefix_parts[-1].isalpha()
+        ):
+            return period_prefix
+    if comma_pos >= 0:
+        first_author = citation[:comma_pos]
+    elif period_pos >= 0:
+        first_author = citation[:period_pos]
+    else:
+        first_author = citation
+    return first_author.strip()
+
+
+def _citation_author_tokens(citation: str) -> list[str]:
+    """Return normalized first-author name tokens from a citation string."""
+    return _significant_tokens(_citation_first_author(citation))
+
+
 def _significant_tokens(value: str) -> list[str]:
     return [
         token
@@ -246,7 +276,23 @@ class PaperResolver:
             aliases.add(author_year)
             compact_aliases.add(author_year.replace(" ", ""))
 
-        label = self._label(filename=filename, docname=docname, title=title, year=year)
+        label = self._label(
+            filename=filename,
+            docname=docname,
+            title=title,
+            year=year,
+            citation=citation,
+        )
+        author_tokens = _citation_author_tokens(citation)
+        if year:
+            for token in author_tokens:
+                author_year = normalize_text(f"{token} {year}")
+                aliases.add(author_year)
+                compact_aliases.add(author_year.replace(" ", ""))
+            if len(author_tokens) >= 2:
+                full_author_year = normalize_text(f"{' '.join(author_tokens)} {year}")
+                aliases.add(full_author_year)
+                compact_aliases.add(full_author_year.replace(" ", ""))
 
         return PaperRecord(
             file_location=file_location,
@@ -262,8 +308,19 @@ class PaperResolver:
         )
 
     def _label(
-        self, filename: str, docname: str, title: str | None, year: int | None
+        self,
+        filename: str,
+        docname: str,
+        title: str | None,
+        year: int | None,
+        citation: str,
     ) -> str:
+        citation_author = _citation_first_author(citation)
+        if citation_author and year:
+            author_parts = [part for part in re.split(r"\s+", citation_author) if part]
+            if author_parts:
+                return f"{author_parts[-1]} {year}"
+
         doc_author, doc_year = _docname_author_year(docname)
         if doc_author and (year or doc_year):
             return f"{doc_author.capitalize()} {year or doc_year}"
@@ -473,16 +530,57 @@ class PaperResolver:
         segment_tokens = set(_significant_tokens(segment))
         if not segment_tokens:
             return []
-        scored: list[tuple[int, PaperRecord]] = []
+        segment_year = _year_from_text(segment)
+        scored: list[tuple[int, int, PaperRecord]] = []
+
+        def prefix_score(tokens: set[str], weight: int) -> int:
+            score = 0
+            for segment_token in segment_tokens:
+                for token in tokens:
+                    if len(segment_token) >= 4 and (
+                        token.startswith(segment_token) or segment_token.startswith(token)
+                    ):
+                        score += weight
+                        break
+            return score
+
         for record in self.records:
-            haystack_tokens = set(
-                _significant_tokens(" ".join([record.title or "", record.filename, record.docname]))
+            doc_author, _ = _docname_author_year(record.docname)
+            author_tokens = set(_citation_author_tokens(record.citation))
+            if doc_author:
+                author_tokens.add(normalize_text(doc_author))
+            label_tokens = set(_significant_tokens(record.label))
+            title_tokens = set(
+                _significant_tokens(
+                    " ".join([record.title or "", record.filename, record.docname])
+                )
             )
-            score = len(segment_tokens & haystack_tokens)
-            if score:
-                scored.append((score, record))
-        scored.sort(key=lambda item: item[0], reverse=True)
-        return [record.to_public() for _, record in scored[:5]]
+
+            year_score = 0
+            if segment_year and record.year:
+                year_score = 3 if int(record.year) == segment_year else -2
+
+            author_score = len(segment_tokens & author_tokens) * 12 + prefix_score(
+                author_tokens, 10
+            )
+            label_score = len(segment_tokens & label_tokens) * 6 + prefix_score(
+                label_tokens, 4
+            )
+            title_score = len(segment_tokens & title_tokens) * 3 + prefix_score(
+                title_tokens, 2
+            )
+
+            if segment_year:
+                base_score = author_score + label_score + max(title_score - 2, 0)
+                if base_score <= 0:
+                    continue
+                score = base_score + year_score
+            else:
+                score = author_score + label_score + title_score
+            if score > 0:
+                scored.append((score, year_score, record))
+        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [record.to_public() for _, _, record in scored[:5]]
 
 
 def _dedupe_preserve_order(values: Any) -> list[str]:
