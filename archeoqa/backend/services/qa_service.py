@@ -34,6 +34,7 @@ from .paper_resolver import PaperResolver, TargetingResult
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 INDEX_METADATA_PATH = _PROJECT_ROOT / "data" / "index_metadata.json"
+PAPER_MANIFEST_PATH = _PROJECT_ROOT / "data" / "analysis" / "paper_manifest.json"
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +335,12 @@ class QAService:
         )
         return any(marker in normalized for marker in comparison_markers)
 
-    def _comparison_prompt(self, question: str, targeting: TargetingResult) -> str:
+    def _comparison_prompt(
+        self,
+        question: str,
+        targeting: TargetingResult,
+        matrix_notes: dict[str, dict[str, Any]] | None = None,
+    ) -> str:
         """Wrap the user question with strict comparative-answer instructions."""
         papers = targeting.resolved_papers
         paper_lines = []
@@ -346,6 +352,11 @@ class QAService:
                 f"{index}. {label} — {title}. Citation: {citation}"
             )
 
+        matrix_guidance = self._format_matrix_notes_for_prompt(
+            targeting,
+            matrix_notes or {},
+        )
+
         return (
             "Question utilisateur originale:\n"
             f"{question}\n\n"
@@ -353,6 +364,7 @@ class QAService:
             "auditable et strictement fondée sur les contextes fournis par PaperQA.\n\n"
             "Papiers autorisés uniquement:\n"
             + "\n".join(paper_lines)
+            + matrix_guidance
             + "\n\n"
             "Format obligatoire:\n"
             "1. Commence par un tableau Markdown avec les colonnes: Papier | Hypothèse | Preuves utilisées | Datation/période | Méthodes/données | Limites/incertitudes.\n"
@@ -360,6 +372,8 @@ class QAService:
             "3. Ajoute une courte section \"Lecture synthétique\" indiquant s'ils se contredisent ou répondent à des niveaux différents, seulement si les contextes le permettent.\n\n"
             "Règles de fiabilité:\n"
             "- N'utilise que les papiers autorisés et les contextes récupérés.\n"
+            "- Les notes Matrix, si présentes, sont seulement une checklist d'organisation: elles ne sont pas des sources citables.\n"
+            "- Ne reprends une information issue de la Matrix que si elle est aussi documentée dans les contextes PaperQA récupérés; sinon écris \"non documenté dans les contextes\".\n"
             "- Distingue explicitement mtDNA moderne, aDNA ancienne, autosomal, uniparental, archéologie et chrono-stratigraphie quand ces catégories apparaissent.\n"
             "- Pour Pereira 2010 ou tout papier similaire fondé sur mtDNA moderne, présente les conclusions comme une inférence phylogéographique/démographique à partir de lignées actuelles, pas comme une preuve archéologique directe de continuité ou de remplacement.\n"
             "- Si les contextes mentionnent IAM, KEB ou TOR, sépare ces groupes explicitement: IAM = Néolithique ancien marocain, KEB = Néolithique récent marocain, TOR = Néolithique ancien sud-ibérique; n'attribue pas à KEB ce qui concerne IAM, ni inversement.\n"
@@ -373,11 +387,12 @@ class QAService:
         self,
         question: str,
         paper: dict[str, Any],
+        matrix_note: dict[str, Any] | None = None,
     ) -> str:
         """Create the evidence-gathering question used for one selected paper."""
         label = paper.get("label") or paper.get("docname") or paper.get("filename")
         title = paper.get("title") or paper.get("filename")
-        return (
+        prompt = (
             "Pour préparer une comparaison entre papiers, extrais uniquement les "
             f"éléments du papier {label} — {title} utiles pour répondre à cette "
             f"question: {question}\n\n"
@@ -386,6 +401,13 @@ class QAService:
             "tes connaissances générales; résume seulement ce qui est documenté dans "
             "ce papier."
         )
+        if matrix_note:
+            prompt += (
+                "\n\nChecklist Matrix non citable pour orienter la recherche dans ce papier "
+                "(ne l'utilise que si les contextes PaperQA confirment):\n"
+                + self._format_single_matrix_note(matrix_note)
+            )
+        return prompt
 
     def _comparison_context_budget(self, paper_count: int) -> int:
         if paper_count <= 2:
@@ -393,6 +415,153 @@ class QAService:
         if paper_count == 3:
             return 4
         return 3
+
+    def _load_manifest_rows_by_file(self) -> dict[str, dict[str, Any]]:
+        if not PAPER_MANIFEST_PATH.exists():
+            return {}
+        try:
+            with open(PAPER_MANIFEST_PATH, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            logger.exception("Could not read paper manifest for matrix-assisted compare")
+            return {}
+        rows = manifest.get("rows", [])
+        if not isinstance(rows, list):
+            return {}
+        return {
+            str(row.get("file_location") or ""): row
+            for row in rows
+            if isinstance(row, dict) and row.get("file_location")
+        }
+
+    def _matrix_notes_for_targeting(
+        self,
+        targeting: TargetingResult,
+    ) -> tuple[
+        dict[str, dict[str, Any]],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
+        manifest_rows = self._load_manifest_rows_by_file()
+        notes_by_file: dict[str, dict[str, Any]] = {}
+        rows_used: list[dict[str, Any]] = []
+        missing: list[dict[str, Any]] = []
+
+        for paper in targeting.resolved_papers:
+            file_location = str(paper.get("file_location") or "")
+            label = str(paper.get("label") or paper.get("docname") or paper.get("filename"))
+            manifest_row = manifest_rows.get(file_location)
+            if not manifest_row:
+                missing.append(
+                    {
+                        "label": label,
+                        "file_location": file_location,
+                        "reason": "manifest_row_missing",
+                    }
+                )
+                continue
+            if manifest_row.get("source") != "matrix_derived":
+                missing.append(
+                    {
+                        "label": label,
+                        "file_location": file_location,
+                        "reason": "matrix_not_available",
+                    }
+                )
+                continue
+
+            note = {
+                "label": label,
+                "file_location": file_location,
+                "paper_kind": manifest_row.get("paper_kind"),
+                "method_tags": manifest_row.get("method_tags") or [],
+                "regions": manifest_row.get("regions") or [],
+                "sites": manifest_row.get("sites") or [],
+                "periods": manifest_row.get("periods") or [],
+                "date_ranges": manifest_row.get("date_ranges") or [],
+                "evidence_types": manifest_row.get("evidence_types") or [],
+                "main_claims": manifest_row.get("main_claims") or [],
+                "limitations": manifest_row.get("limitations") or [],
+                "uncertainties": manifest_row.get("uncertainties") or [],
+                "source": manifest_row.get("source"),
+            }
+            notes_by_file[file_location] = note
+            rows_used.append(
+                {
+                    "label": label,
+                    "file_location": file_location,
+                    "source": str(manifest_row.get("source") or ""),
+                    "paper_kind": str(manifest_row.get("paper_kind") or ""),
+                    "method_tags": list(manifest_row.get("method_tags") or []),
+                }
+            )
+
+        return notes_by_file, rows_used, missing
+
+    def _short_matrix_values(
+        self,
+        values: Any,
+        *,
+        max_items: int = 5,
+        max_chars: int = 120,
+    ) -> list[str]:
+        if not isinstance(values, list):
+            return []
+        shortened: list[str] = []
+        for value in values:
+            text = str(value).strip()
+            if not text:
+                continue
+            if len(text) > max_chars:
+                text = text[: max_chars - 1].rstrip() + "…"
+            shortened.append(text)
+            if len(shortened) >= max_items:
+                break
+        return shortened
+
+    def _format_single_matrix_note(self, note: dict[str, Any]) -> str:
+        fields = (
+            ("Type papier", "paper_kind"),
+            ("Tags méthodes", "method_tags"),
+            ("Régions", "regions"),
+            ("Sites", "sites"),
+            ("Périodes", "periods"),
+            ("Datations", "date_ranges"),
+            ("Types de preuve", "evidence_types"),
+            ("Claims", "main_claims"),
+            ("Limites", "limitations"),
+            ("Incertitudes", "uncertainties"),
+        )
+        lines: list[str] = []
+        for label, key in fields:
+            raw = note.get(key)
+            values = [str(raw)] if isinstance(raw, str) and raw else self._short_matrix_values(raw)
+            if values:
+                lines.append(f"- {label}: {', '.join(values)}")
+        return "\n".join(lines) if lines else "- Aucune note Matrix exploitable."
+
+    def _format_matrix_notes_for_prompt(
+        self,
+        targeting: TargetingResult,
+        matrix_notes: dict[str, dict[str, Any]],
+    ) -> str:
+        if not matrix_notes:
+            return ""
+        sections: list[str] = []
+        for paper in targeting.resolved_papers:
+            file_location = str(paper.get("file_location") or "")
+            note = matrix_notes.get(file_location)
+            if not note:
+                continue
+            label = note.get("label") or paper.get("label") or paper.get("docname")
+            sections.append(f"{label}:\n{self._format_single_matrix_note(note)}")
+        if not sections:
+            return ""
+        return (
+            "\n\nNotes Matrix disponibles (non citables, à utiliser seulement comme "
+            "checklist si les contextes PaperQA confirment):\n"
+            + "\n\n".join(sections)
+        )
 
     def _settings_with_evidence_budget(
         self,
@@ -572,6 +741,7 @@ class QAService:
         self,
         question: str,
         targeting: TargetingResult,
+        matrix_notes: dict[str, dict[str, Any]] | None = None,
         on_status: Callable[[QAStatus], Any] | None = None,
     ) -> tuple[
         list[Any],
@@ -618,7 +788,11 @@ class QAService:
                 continue
 
             paper_session = PQASession(
-                question=self._per_paper_comparison_question(question, paper)
+                question=self._per_paper_comparison_question(
+                    question,
+                    paper,
+                    (matrix_notes or {}).get(file_location),
+                )
             )
             paper_session = await paper_docs.aget_evidence(
                 paper_session,
@@ -784,6 +958,9 @@ class QAService:
                 )
             )
 
+        matrix_notes, matrix_rows_used, matrix_missing_papers = (
+            self._matrix_notes_for_targeting(targeting)
+        )
         (
             balanced_contexts,
             per_paper_counts,
@@ -794,6 +971,7 @@ class QAService:
         ) = await self._gather_balanced_comparison_contexts(
             question,
             targeting,
+            matrix_notes,
             on_status=on_status,
         )
 
@@ -806,7 +984,7 @@ class QAService:
                 )
             )
 
-        answer_question = self._comparison_prompt(question, targeting)
+        answer_question = self._comparison_prompt(question, targeting, matrix_notes)
         session = PQASession(question=answer_question)
         session.contexts = balanced_contexts
         final_settings = self._settings_with_evidence_budget(
@@ -865,6 +1043,14 @@ class QAService:
                     "partial_papers": partial_papers,
                     "context_quality_filter": "bibliography_reference_heuristic",
                     "dropped_low_quality_contexts": dropped_low_quality,
+                    "matrix_assisted": bool(matrix_rows_used),
+                    "matrix_assistance_strategy": (
+                        "matrix_notes_as_retrieval_and_synthesis_guidance"
+                        if matrix_rows_used
+                        else None
+                    ),
+                    "matrix_rows_used": matrix_rows_used,
+                    "matrix_missing_papers": matrix_missing_papers,
                 },
             ),
         )

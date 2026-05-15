@@ -9,8 +9,10 @@ The system now has:
 - Citation cleanup for raw PaperQA chunk references.
 - Evidence Matrix V1 with quality metadata and researcher curation.
 - Matrix UI with filters, evidence expansion, notes, and verification.
+- Lightweight paper manifest in `archeoqa/data/analysis/paper_manifest.json`, derived from the index and Evidence Matrix without LLM calls.
 - Compare Selected Papers button in Chat, using the existing manual `paper_filter`.
 - Compare button supports a user-specified angle when the input box is filled; otherwise it uses the standard broad comparison prompt.
+- Selected comparisons now use balanced per-paper retrieval plus optional Matrix assistance. Matrix notes guide retrieval/synthesis only; final citations still come from PaperQA contexts.
 
 ## Recently Fixed
 - Manual paper filters no longer leak into unrelated papers.
@@ -21,6 +23,8 @@ The system now has:
 - Pereira-style papers are framed as phylogeographic/demographic inference from modern mtDNA, not direct archaeological proof.
 - Failed PaperQA index entries are retried instead of being silently skipped by "continue indexing".
 - Ambiguous mention suggestions now include likely candidates, e.g. `Fran 2017` suggests `François 2018 — La genèse du langage et des langues` instead of searching globally.
+- Balanced selected-paper comparisons retrieve evidence per paper, filter obvious bibliography/reference contexts when alternatives exist, and prevent source leakage.
+- Matrix-assisted comparison was validated qualitatively: the Matrix-assisted three-paper answer was more complete on data types and methodological limits than the non-assisted baseline, while still citing PaperQA sources.
 
 ## Known UX Issues
 - The Chat paper filter currently displays PaperQA-extracted titles when available, not always the PDF filename. Example: the PDF `Ancient genomes from North Africa evidence prehistoric migrations to the Maghreb from both the Levant and Europe.pdf` appears as `Neolithization of North Africa involved the migration of people from both the Levant and Europe (2017)`. This is technically correct metadata, but confusing for users who search by filename.
@@ -35,7 +39,7 @@ Do not commit:
 - `archeoqa/data/settings.json`
 
 ## Recommended Next Tests
-Use Rapid mode first for selected-paper comparisons. For Fregel/Pereira, select:
+Use the normal Compare button for selected-paper comparisons. For Fregel/Pereira, select:
 ```text
 Neolithization of North Africa involved the migration of people from both the Levant and Europe (2017)
 Population expansion in the North African Late Pleistocene signalled by mitochondrial DNA haplogroup U6 (2010)
@@ -50,10 +54,22 @@ sur la chronologie des migrations
 sur les types de données utilisées : mtDNA moderne, aDNA, autosomal
 ```
 
+For Matrix-assisted comparison, also test with:
+```text
+Genetics and the African past
+```
+
+and this angle:
+```text
+sur les types de données utilisées et les limites méthodologiques
+```
+
+Expected targeting badges: manual/auto targeted search, balanced comparative answer, and `Assistée par matrice` when Matrix rows are available.
+
 Then test broad corpus questions:
 ```text
 Compare les preuves archéologiques et génétiques utilisées pour discuter les migrations préhistoriques vers le Maghreb.
 ```
 
 ## Next Product Step
-Before Gap Finder, finish validating the Compare Selected Papers workflow and fix the paper filter UX enough that users do not accidentally select similarly named papers. After that, proceed to Gap Finder V1 on top of the Evidence Matrix.
+Do not spend more quota finishing the remaining Matrix rows unless needed. Next likely product steps are Matrix cheap mode / selected-paper Matrix build, then Gap Finder or Difference Finder on top of the Matrix and manifest.

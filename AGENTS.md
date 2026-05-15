@@ -20,8 +20,10 @@ ArcheoRAG is a local archaeology research assistant built on PaperQA2. PaperQA r
 - Main QA service: `archeoqa/backend/services/qa_service.py`.
 - Paper resolver: `archeoqa/backend/services/paper_resolver.py`.
 - Evidence Matrix service: `archeoqa/backend/services/analysis_service.py`.
+- Paper manifest service: `archeoqa/backend/services/paper_manifest_service.py`; it derives runtime metadata in `archeoqa/data/analysis/paper_manifest.json` from the index and Evidence Matrix without LLM calls.
 - Selected-paper comparisons use a balanced per-paper retrieval path in `qa_service.py`: gather evidence separately for each selected/resolved paper, keep sources isolated to those papers, then synthesize the final comparison.
 - The balanced comparison path has a conservative context-quality filter to drop bibliography/reference-like contexts only when enough better contexts remain for the same paper.
+- Matrix-assisted comparisons may use Evidence Matrix/manifest notes as non-citable guidance, but final answers must still cite PaperQA contexts only and must fall back cleanly when Matrix data is missing.
 
 ## Development Commands
 Backend:
@@ -49,6 +51,7 @@ npm run build
 - PaperQA managed directory index is used; later Index All runs should sync/skip unchanged papers.
 - Full rebuild is only for changed indexing config or explicit rebuild.
 - Use the project venv for backend commands; using a different Python/PaperQA install can make the app report that the index must be rebuilt even when the index is valid.
+- Evidence Matrix builds are expensive because they run multiple PaperQA/LLM passes per paper. Do not rebuild it casually; use partial existing Matrix data when possible.
 
 ## Product Direction
 The next research features should build on the Evidence Matrix instead of rereading PDFs repeatedly:

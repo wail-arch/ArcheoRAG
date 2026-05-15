@@ -397,6 +397,11 @@ function TargetingNotice({ targeting }: { targeting?: TargetingInfo }) {
               {isBalanced ? 'Réponse comparative équilibrée par papier' : 'Réponse comparative structurée'}
             </p>
           )}
+          {targeting.matrix_assisted && (
+            <p className="text-xs mt-1 font-medium">
+              Assistée par matrice
+            </p>
+          )}
           <p className="text-xs mt-1">
             {papers.map(paperLabel).join(', ')}
           </p>

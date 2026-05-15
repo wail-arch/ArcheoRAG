@@ -13,6 +13,7 @@
 - Comparisons should separate hypothesis, evidence, method, period, limitation, and interpretation.
 - If a field is absent from contexts, say it is not documented.
 - Do not hide uncertainty. Surface it as a useful research signal.
+- Evidence Matrix/manifest data can guide retrieval and synthesis, but it is not a citable source in final answers. Cite PaperQA contexts only.
 
 ## Frontend Standards
 - Build the usable research workflow, not marketing pages.
@@ -27,6 +28,8 @@
 - Preserve local persistence; do not force users to re-index every startup.
 - Treat settings changes that affect indexing as stale-index events.
 - Keep JSON storage acceptable for v1 research artifacts; move to SQLite only after schemas stabilize.
+- Treat Evidence Matrix as optional enhancement data. Core Q&A and Compare must still work when Matrix/manifest files are missing or incomplete.
+- Avoid expensive Matrix rebuilds during debugging; prefer using existing partial Matrix data, retrying failed rows, or building selected papers once those workflows exist.
 
 ## Git Hygiene
 - Do not commit local PDFs, indexes, settings, or generated analysis JSON.

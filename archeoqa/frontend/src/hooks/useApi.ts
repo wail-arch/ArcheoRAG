@@ -65,6 +65,10 @@ export interface TargetingInfo {
   candidates?: Record<string, TargetingPaper[]>;
   answer_mode?: 'targeted_comparison' | 'targeted_comparison_balanced' | 'standard';
   comparison_strategy?: string;
+  matrix_assisted?: boolean;
+  matrix_assistance_strategy?: string | null;
+  matrix_rows_used?: Array<{ label: string; file_location: string; source: string; paper_kind?: string; method_tags?: string[] }>;
+  matrix_missing_papers?: Array<{ label: string; file_location: string; reason: string }>;
   per_paper_context_counts?: Record<string, number>;
   partial_papers?: Array<{ label: string; file_location: string; reason: string; context_count?: number }>;
   context_quality_filter?: string;
@@ -279,9 +283,13 @@ export interface PaperManifestRow {
   paper_kind: 'primary_study' | 'review' | 'preprint' | 'unknown';
   method_tags: string[];
   regions: string[];
+  sites: string[];
   periods: string[];
   date_ranges: string[];
   evidence_types: string[];
+  main_claims: string[];
+  limitations: string[];
+  uncertainties: string[];
   matrix_status: MatrixRow['status'] | null;
   row_verified: boolean;
   needs_review: boolean;

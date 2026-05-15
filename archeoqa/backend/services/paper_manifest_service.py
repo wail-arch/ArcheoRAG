@@ -168,6 +168,7 @@ class PaperManifestService:
         indexed_files = {paper["file_location"] for paper in indexed}
         stale = (
             not MANIFEST_PATH.exists()
+            or metadata.get("version") != MANIFEST_VERSION
             or metadata.get("index_config_hash") != current_hash
             or metadata.get("matrix_updated_at") != matrix_store.get("metadata", {}).get("updated_at")
             or metadata.get("overrides_updated_at") != overrides.get("metadata", {}).get("updated_at")
@@ -303,9 +304,13 @@ class PaperManifestService:
             "paper_kind": self._paper_kind(searchable_text, bool(matrix_row)),
             "method_tags": self._method_tags(searchable_text),
             "regions": _manifest_item_values(fields.get("regions")),
+            "sites": _manifest_item_values(fields.get("sites")),
             "periods": _manifest_item_values(fields.get("periods")),
             "date_ranges": _manifest_item_values(fields.get("date_ranges")),
             "evidence_types": _manifest_item_values(fields.get("evidence_types")),
+            "main_claims": _manifest_item_values(fields.get("main_claims")),
+            "limitations": _manifest_item_values(fields.get("limitations")),
+            "uncertainties": _manifest_item_values(fields.get("uncertainties")),
             "matrix_status": matrix_row.get("status") if matrix_row else None,
             "row_verified": bool(matrix_row.get("curation", {}).get("row_verified")) if matrix_row else False,
             "needs_review": bool(matrix_row.get("quality", {}).get("needs_review")) if matrix_row else True,
