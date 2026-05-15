@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..services.analysis_service import get_analysis_service
+from ..services.paper_manifest_service import get_manifest_service
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -90,3 +91,17 @@ async def verify_matrix_row(file_location: str, request: MatrixVerifyRequest):
         raise HTTPException(status_code=404, detail="Matrix row not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/manifest")
+async def get_paper_manifest():
+    """Return the lightweight paper manifest, rebuilding it if stale."""
+    service = get_manifest_service()
+    return await service.get_manifest()
+
+
+@router.post("/manifest/build")
+async def build_paper_manifest():
+    """Rebuild the lightweight paper manifest from index and matrix metadata."""
+    service = get_manifest_service()
+    return await service.build_manifest()

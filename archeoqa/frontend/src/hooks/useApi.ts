@@ -267,6 +267,44 @@ export interface MatrixBuildResponse {
   matrix: MatrixResponse;
 }
 
+export interface PaperManifestRow {
+  file_location: string;
+  filename: string;
+  docname: string;
+  title?: string | null;
+  year?: number | null;
+  citation: string;
+  label: string;
+  aliases: string[];
+  paper_kind: 'primary_study' | 'review' | 'preprint' | 'unknown';
+  method_tags: string[];
+  regions: string[];
+  periods: string[];
+  date_ranges: string[];
+  evidence_types: string[];
+  matrix_status: MatrixRow['status'] | null;
+  row_verified: boolean;
+  needs_review: boolean;
+  source: 'indexed_only' | 'matrix_derived';
+}
+
+export interface PaperManifestStatus {
+  exists: boolean;
+  available: boolean;
+  stale: boolean;
+  paper_count: number;
+  row_count: number;
+  last_build_at: string | null;
+  index_config_hash: string;
+  path: string;
+}
+
+export interface PaperManifestResponse {
+  metadata: Record<string, unknown>;
+  rows: PaperManifestRow[];
+  status: PaperManifestStatus;
+}
+
 export function getMatrixStatus(): Promise<MatrixStatus> {
   return apiFetch('/analysis/matrix/status');
 }
@@ -314,6 +352,14 @@ export function verifyMatrixRow(
     method: 'POST',
     body: JSON.stringify({ verified, field }),
   });
+}
+
+export function getPaperManifest(): Promise<PaperManifestResponse> {
+  return apiFetch('/analysis/manifest');
+}
+
+export function buildPaperManifest(): Promise<PaperManifestResponse> {
+  return apiFetch('/analysis/manifest/build', { method: 'POST' });
 }
 
 // Settings
