@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  CheckSquare,
   ChevronDown,
   ChevronUp,
   Database,
@@ -12,16 +13,20 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Square,
   TableProperties,
   Trash2,
 } from 'lucide-react';
 import {
   buildEvidenceMatrix,
   getEvidenceMatrix,
+  getIndexedPapers,
   resetEvidenceMatrix,
   updateMatrixRowCuration,
   verifyMatrixRow,
+  type IndexedPaper,
   type MatrixFieldItem,
+  type MatrixQuality,
   type MatrixResponse,
   type MatrixRow,
 } from '../hooks/useApi';
@@ -109,6 +114,60 @@ function replaceRow(matrix: MatrixResponse, updatedRow: MatrixRow): MatrixRespon
   };
 }
 
+function emptyFields(): Record<string, MatrixFieldItem[]> {
+  return Object.fromEntries(MATRIX_FIELDS.map((field) => [field.key, []]));
+}
+
+function emptyQuality(): MatrixQuality {
+  const fieldQuality = Object.fromEntries(
+    MATRIX_FIELDS.map((field) => [
+      field.key,
+      {
+        item_count: 0,
+        confidence_counts: { high: 0, medium: 0, low: 0 },
+        supporting_context_count: 0,
+        missing: true,
+        verified: false,
+      },
+    ])
+  );
+  return {
+    confidence_counts: { high: 0, medium: 0, low: 0 },
+    field_quality: fieldQuality,
+    supporting_context_count: 0,
+    missing_key_categories: FIELD_COLUMNS.map((field) => field.key),
+    missing_groups: ['context', 'methods', 'interpretation'],
+    dropped_unsupported_count: 0,
+    needs_review: true,
+  };
+}
+
+function placeholderRow(paper: IndexedPaper, currentHash = ''): MatrixRow {
+  const fields = emptyFields();
+  return {
+    paper,
+    fields,
+    generated_fields: fields,
+    contexts: [],
+    status: 'partial',
+    quality: emptyQuality(),
+    curation: {
+      notes: '',
+      row_verified: false,
+      verified_fields: [],
+      curated_fields: {},
+      updated_at: null,
+    },
+    dropped_items: [],
+    updated_at: '',
+    index_config_hash: currentHash,
+  };
+}
+
+function isPlaceholderRow(row: MatrixRow): boolean {
+  return row.updated_at === '' && row.contexts.length === 0;
+}
+
 function matchesReviewFilter(
   row: MatrixRow,
   reviewFilter: ReviewFilter,
@@ -125,6 +184,7 @@ function matchesReviewFilter(
 
 export default function MatrixPage() {
   const [matrix, setMatrix] = useState<MatrixResponse | null>(null);
+  const [indexedPapers, setIndexedPapers] = useState<IndexedPaper[]>([]);
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -133,12 +193,18 @@ export default function MatrixPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   const loadMatrix = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setMatrix(await getEvidenceMatrix());
+      const [matrixResult, indexedResult] = await Promise.all([
+        getEvidenceMatrix(),
+        getIndexedPapers(),
+      ]);
+      setMatrix(matrixResult);
+      setIndexedPapers(indexedResult);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Chargement de la matrice échoué'));
     }
@@ -165,6 +231,29 @@ export default function MatrixPage() {
     setBuilding(false);
   };
 
+  const handleBuildSelection = async (force: boolean) => {
+    const fileLocations = Array.from(selectedFiles);
+    if (fileLocations.length === 0) return;
+    setBuilding(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await buildEvidenceMatrix({
+        force,
+        mode: 'cheap',
+        file_locations: fileLocations,
+      });
+      setMatrix(result.matrix);
+      setSelectedFiles(new Set());
+      setMessage(
+        `Sélection terminée en mode éco: ${result.analyzed} analysé(s), ${result.skipped} ignoré(s), ${result.failed} échec(s)`
+      );
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Construction de la sélection échouée'));
+    }
+    setBuilding(false);
+  };
+
   const handleReset = async () => {
     setBuilding(true);
     setMessage(null);
@@ -172,6 +261,7 @@ export default function MatrixPage() {
     try {
       setMatrix(await resetEvidenceMatrix(true));
       setExpanded(null);
+      setSelectedFiles(new Set());
       setMessage('Matrice réinitialisée.');
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Réinitialisation de la matrice échouée'));
@@ -183,8 +273,18 @@ export default function MatrixPage() {
     setMatrix((prev) => (prev ? replaceRow(prev, updatedRow) : prev));
   };
 
-  const rows = useMemo(() => matrix?.rows ?? [], [matrix]);
   const status = matrix?.status;
+  const matrixRows = useMemo(() => matrix?.rows ?? [], [matrix]);
+  const rows = useMemo(() => {
+    const rowsByFile = new Map(
+      matrixRows.map((row) => [row.paper.file_location, row])
+    );
+    const currentHash = status?.index_config_hash ?? '';
+    const placeholders = indexedPapers
+      .filter((paper) => !rowsByFile.has(paper.file_location))
+      .map((paper) => placeholderRow(paper, currentHash));
+    return [...matrixRows, ...placeholders];
+  }, [indexedPapers, matrixRows, status?.index_config_hash]);
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return rows.filter((row) => {
@@ -201,10 +301,44 @@ export default function MatrixPage() {
     });
   }, [rows, query, filters, reviewFilter, status?.index_config_hash]);
 
-  const unverifiedCount = rows.filter((row) => !row.curation?.row_verified).length;
-  const lowConfidenceCount = rows.filter(
+  const selectedCount = selectedFiles.size;
+  const visibleSelectedCount = filteredRows.filter((row) =>
+    selectedFiles.has(row.paper.file_location)
+  ).length;
+  const allVisibleSelected =
+    filteredRows.length > 0 && visibleSelectedCount === filteredRows.length;
+  const unverifiedCount = matrixRows.filter((row) => !row.curation?.row_verified).length;
+  const lowConfidenceCount = matrixRows.filter(
     (row) => (row.quality?.confidence_counts.low ?? 0) > 0
   ).length;
+
+  const toggleSelected = (fileLocation: string) => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileLocation)) {
+        next.delete(fileLocation);
+      } else {
+        next.add(fileLocation);
+      }
+      return next;
+    });
+  };
+
+  const toggleVisibleSelection = () => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const row of filteredRows) {
+          next.delete(row.paper.file_location);
+        }
+      } else {
+        for (const row of filteredRows) {
+          next.add(row.paper.file_location);
+        }
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="h-full overflow-y-auto">
@@ -234,7 +368,7 @@ export default function MatrixPage() {
             </button>
             <button
               onClick={handleReset}
-              disabled={building || rows.length === 0}
+              disabled={building || matrixRows.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Trash2 className="w-4 h-4" />
@@ -308,6 +442,32 @@ export default function MatrixPage() {
                     {filter.label}
                   </button>
                 ))}
+                {selectedCount > 0 && (
+                  <>
+                    <button
+                      onClick={() => handleBuildSelection(false)}
+                      disabled={building}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${building ? 'animate-spin' : ''}`} />
+                      Construire sélection ({selectedCount})
+                    </button>
+                    <button
+                      onClick={() => handleBuildSelection(true)}
+                      disabled={building}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-gray-800 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Reconstruire sélection
+                    </button>
+                    <button
+                      onClick={() => setSelectedFiles(new Set())}
+                      disabled={building}
+                      className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 disabled:opacity-50"
+                    >
+                      Désélectionner
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -316,6 +476,20 @@ export default function MatrixPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                     <tr>
+                      <th className="w-10 px-3 py-2">
+                        <button
+                          onClick={toggleVisibleSelection}
+                          disabled={filteredRows.length === 0}
+                          className="p-1 text-gray-400 hover:text-amber-600 disabled:opacity-40"
+                          title={allVisibleSelected ? 'Désélectionner les lignes visibles' : 'Sélectionner les lignes visibles'}
+                        >
+                          {allVisibleSelected ? (
+                            <CheckSquare className="w-4 h-4" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </th>
                       <th className="text-left px-3 py-2 font-medium">Papier</th>
                       {FIELD_COLUMNS.map((field) => (
                         <th key={field.key} className="text-left px-3 py-2 font-medium min-w-40">
@@ -328,13 +502,13 @@ export default function MatrixPage() {
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {loading ? (
                       <tr>
-                        <td colSpan={9} className="px-3 py-8 text-center text-gray-400">
+                        <td colSpan={10} className="px-3 py-8 text-center text-gray-400">
                           Chargement...
                         </td>
                       </tr>
                     ) : filteredRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-3 py-8 text-center text-gray-400">
+                        <td colSpan={10} className="px-3 py-8 text-center text-gray-400">
                           Aucune ligne ne correspond aux filtres.
                         </td>
                       </tr>
@@ -344,11 +518,13 @@ export default function MatrixPage() {
                           key={row.paper.file_location}
                           row={row}
                           expanded={expanded === row.paper.file_location}
+                          selected={selectedFiles.has(row.paper.file_location)}
                           onToggle={() =>
                             setExpanded((prev) =>
                               prev === row.paper.file_location ? null : row.paper.file_location
                             )
                           }
+                          onSelect={() => toggleSelected(row.paper.file_location)}
                           onRowUpdated={handleRowUpdated}
                           onError={setError}
                         />
@@ -368,28 +544,51 @@ export default function MatrixPage() {
 function MatrixTableRow({
   row,
   expanded,
+  selected,
   onToggle,
+  onSelect,
   onRowUpdated,
   onError,
 }: {
   row: MatrixRow;
   expanded: boolean;
+  selected: boolean;
   onToggle: () => void;
+  onSelect: () => void;
   onRowUpdated: (row: MatrixRow) => void;
   onError: (message: string | null) => void;
 }) {
   const paperTitle = row.paper.title || row.paper.filename || row.paper.docname;
+  const placeholder = isPlaceholderRow(row);
 
   return (
     <>
       <tr className={row.status === 'failed' ? 'bg-red-50 dark:bg-red-900/10' : ''}>
+        <td className="px-3 py-3 align-top">
+          <button
+            onClick={onSelect}
+            className="p-1 text-gray-400 hover:text-amber-600"
+            title={selected ? 'Désélectionner ce papier' : 'Sélectionner ce papier'}
+          >
+            {selected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+          </button>
+        </td>
         <td className="px-3 py-3 align-top min-w-72">
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="font-medium text-gray-800 dark:text-gray-100">{paperTitle}</p>
-              <p className="text-xs text-gray-400">{row.paper.year || row.status}</p>
+              <p className="text-xs text-gray-400">
+                {placeholder ? 'non construite' : row.paper.year || row.status}
+                {row.build_mode === 'cheap' ? ' · éco' : ''}
+              </p>
             </div>
-            <StatusBadge status={row.status} />
+            {placeholder ? (
+              <span className="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300">
+                à créer
+              </span>
+            ) : (
+              <StatusBadge status={row.status} />
+            )}
           </div>
           {row.curation?.notes && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">
@@ -414,7 +613,7 @@ function MatrixTableRow({
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={9} className="px-4 py-4 bg-gray-50 dark:bg-gray-800/60">
+          <td colSpan={10} className="px-4 py-4 bg-gray-50 dark:bg-gray-800/60">
             <ExpandedEvidence
               key={`${row.paper.file_location}-${row.curation?.updated_at ?? row.updated_at}`}
               row={row}
@@ -535,6 +734,14 @@ function ExpandedEvidence({
     }
     setSaving(false);
   };
+
+  if (isPlaceholderRow(row)) {
+    return (
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Ligne non construite. Cochez ce papier puis utilisez Construire sélection pour générer une Matrix éco.
+      </p>
+    );
+  }
 
   if (row.status === 'failed') {
     return <p className="text-sm text-red-600 dark:text-red-400">{row.error}</p>;

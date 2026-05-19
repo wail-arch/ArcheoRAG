@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -15,6 +15,8 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 class MatrixBuildRequest(BaseModel):
     force: bool = False
+    mode: Literal["standard", "cheap"] = "standard"
+    file_locations: list[str] | None = None
 
 
 class MatrixResetRequest(BaseModel):
@@ -52,7 +54,16 @@ async def get_matrix():
 async def build_matrix(request: MatrixBuildRequest | None = None):
     """Build or refresh the evidence matrix."""
     service = get_analysis_service()
-    return await service.build_matrix(force=bool(request and request.force))
+    try:
+        if request is None:
+            return await service.build_matrix(force=False)
+        return await service.build_matrix(
+            force=request.force,
+            mode=request.mode,
+            file_locations=request.file_locations,
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/matrix/reset")

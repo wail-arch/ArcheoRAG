@@ -52,6 +52,7 @@ npm run build
 - Full rebuild is only for changed indexing config or explicit rebuild.
 - Use the project venv for backend commands; using a different Python/PaperQA install can make the app report that the index must be rebuilt even when the index is valid.
 - Evidence Matrix builds are expensive because they run multiple PaperQA/LLM passes per paper. Do not rebuild it casually; use partial existing Matrix data when possible.
+- For targeted Matrix completion, prefer selected-paper cheap builds from the Matrix page. Cheap mode builds only chosen papers with one combined extraction pass and preserves existing rows unless force is requested.
 
 ## Product Direction
 The next research features should build on the Evidence Matrix instead of rereading PDFs repeatedly:

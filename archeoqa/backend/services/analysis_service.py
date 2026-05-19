@@ -45,6 +45,14 @@ PASS_QUERIES = {
     ),
 }
 
+CHEAP_QUERY = (
+    "For this archaeology paper only, extract a compact evidence matrix covering "
+    "regions, sites, cultural or chronological periods, date ranges, research "
+    "methods, material categories, evidence types, main research claims, stated "
+    "limitations, uncertainties, debates, and unresolved questions. Focus on "
+    "explicitly supported information and keep values concise."
+)
+
 PASS_FIELDS = {
     "context": ["regions", "sites", "periods", "date_ranges"],
     "methods": ["methods", "materials", "evidence_types"],
@@ -235,7 +243,15 @@ class EvidenceMatrixService:
                 path.unlink()
         return await self.get_matrix()
 
-    async def build_matrix(self, force: bool = False) -> dict[str, Any]:
+    async def build_matrix(
+        self,
+        force: bool = False,
+        mode: str = "standard",
+        file_locations: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if mode not in {"standard", "cheap"}:
+            raise ValueError(f"Unknown matrix build mode: {mode}")
+
         indexed = await self.qa_service.get_indexed_papers()
         current_hash = self.qa_service.get_index_config_hash()
         store = self.load_store()
@@ -245,12 +261,27 @@ class EvidenceMatrixService:
             for row in rows
             if row.get("paper", {}).get("file_location")
         }
+        has_file_filter = file_locations is not None
+        requested_files = set(file_locations or [])
+        if has_file_filter:
+            indexed_files = {paper["file_location"] for paper in indexed}
+            unknown_files = sorted(requested_files - indexed_files)
+            if unknown_files:
+                raise KeyError(
+                    "Unknown indexed paper file_location(s): "
+                    + ", ".join(unknown_files)
+                )
+            papers_to_build = [
+                paper for paper in indexed if paper["file_location"] in requested_files
+            ]
+        else:
+            papers_to_build = indexed
 
         analyzed = 0
         skipped = 0
         failed = 0
 
-        for paper in indexed:
+        for paper in papers_to_build:
             file_location = paper["file_location"]
             existing = rows_by_file.get(file_location)
             if (
@@ -264,13 +295,22 @@ class EvidenceMatrixService:
                 continue
 
             try:
-                row = await self._analyze_paper(paper, current_hash)
+                row = await self._analyze_paper(
+                    paper,
+                    current_hash,
+                    build_mode=mode,
+                )
                 analyzed += 1
                 if row["status"] == "failed":
                     failed += 1
             except Exception as exc:
                 logger.exception("Evidence matrix extraction failed for %s", file_location)
-                row = self._failed_row(paper, current_hash, str(exc))
+                row = self._failed_row(
+                    paper,
+                    current_hash,
+                    str(exc),
+                    build_mode=mode,
+                )
                 failed += 1
 
             rows_by_file[file_location] = row
@@ -297,12 +337,17 @@ class EvidenceMatrixService:
             "analyzed": analyzed,
             "skipped": skipped,
             "failed": failed,
-            "total": len(indexed),
+            "total": len(papers_to_build),
+            "mode": mode,
+            "selected": has_file_filter,
             "matrix": await self.get_matrix(),
         }
 
     async def _analyze_paper(
-        self, paper: dict[str, Any], index_config_hash: str
+        self,
+        paper: dict[str, Any],
+        index_config_hash: str,
+        build_mode: str = "standard",
     ) -> dict[str, Any]:
         fields = _empty_fields()
         contexts_by_id: dict[str, dict[str, Any]] = {}
@@ -314,31 +359,55 @@ class EvidenceMatrixService:
                 paper,
                 index_config_hash,
                 "Indexed PaperQA document could not be loaded.",
+                build_mode=build_mode,
             )
 
-        for pass_name, query in PASS_QUERIES.items():
-            session = PQASession(question=query)
+        if build_mode == "cheap":
+            session = PQASession(question=CHEAP_QUERY)
             session = await docs.aget_evidence(session, settings=self.qa_service.settings)
             pass_contexts = [_serialize_context(ctx) for ctx in session.contexts]
             for ctx in pass_contexts:
                 contexts_by_id[ctx["id"]] = ctx
 
-            if not pass_contexts:
-                continue
-
-            extracted = await self._extract_pass_fields(
-                pass_name=pass_name,
-                contexts=pass_contexts,
-            )
-            valid_ids = set(contexts_by_id)
-            for field in PASS_FIELDS[pass_name]:
-                valid_items, dropped = self._validated_items(
-                    extracted.get(field, []),
-                    valid_ids,
-                    field,
+            if pass_contexts:
+                extracted = await self._extract_fields_from_contexts(
+                    name="cheap",
+                    fields=ALL_FIELDS,
+                    contexts=pass_contexts,
                 )
-                fields[field].extend(valid_items)
-                dropped_items.extend(dropped)
+                valid_ids = set(contexts_by_id)
+                for field in ALL_FIELDS:
+                    valid_items, dropped = self._validated_items(
+                        extracted.get(field, []),
+                        valid_ids,
+                        field,
+                    )
+                    fields[field].extend(valid_items)
+                    dropped_items.extend(dropped)
+        else:
+            for pass_name, query in PASS_QUERIES.items():
+                session = PQASession(question=query)
+                session = await docs.aget_evidence(session, settings=self.qa_service.settings)
+                pass_contexts = [_serialize_context(ctx) for ctx in session.contexts]
+                for ctx in pass_contexts:
+                    contexts_by_id[ctx["id"]] = ctx
+
+                if not pass_contexts:
+                    continue
+
+                extracted = await self._extract_pass_fields(
+                    pass_name=pass_name,
+                    contexts=pass_contexts,
+                )
+                valid_ids = set(contexts_by_id)
+                for field in PASS_FIELDS[pass_name]:
+                    valid_items, dropped = self._validated_items(
+                        extracted.get(field, []),
+                        valid_ids,
+                        field,
+                    )
+                    fields[field].extend(valid_items)
+                    dropped_items.extend(dropped)
 
         fields = self._dedupe_fields(fields)
         quality = self._compute_quality(fields, dropped_items)
@@ -351,13 +420,15 @@ class EvidenceMatrixService:
             "status": status,
             "quality": quality,
             "dropped_items": dropped_items,
+            "build_mode": build_mode,
             "updated_at": _now_iso(),
             "index_config_hash": index_config_hash,
         }
 
-    async def _extract_pass_fields(
+    async def _extract_fields_from_contexts(
         self,
-        pass_name: str,
+        name: str,
+        fields: list[str],
         contexts: list[dict[str, Any]],
     ) -> dict[str, Any]:
         context_lines = []
@@ -377,7 +448,6 @@ class EvidenceMatrixService:
                 )
             )
 
-        fields = PASS_FIELDS[pass_name]
         schema = {
             field: [
                 {
@@ -414,10 +484,21 @@ class EvidenceMatrixService:
                 Message(role="system", content="Return grounded JSON only."),
                 Message(role="user", content=prompt),
             ],
-            name=f"evidence_matrix_{pass_name}",
+            name=f"evidence_matrix_{name}",
         )
         data = _extract_json_object(str(result.text))
         return {field: data.get(field, []) for field in fields}
+
+    async def _extract_pass_fields(
+        self,
+        pass_name: str,
+        contexts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return await self._extract_fields_from_contexts(
+            name=pass_name,
+            fields=PASS_FIELDS[pass_name],
+            contexts=contexts,
+        )
 
     def _validated_items(
         self,
@@ -494,6 +575,7 @@ class EvidenceMatrixService:
             normalized_fields[field] = self._normalize_items(fields.get(field, []))
         row["generated_fields"] = normalized_fields
         row["fields"] = deepcopy(normalized_fields)
+        row.setdefault("build_mode", "standard")
         row.setdefault("dropped_items", [])
         row["quality"] = self._compute_quality(
             normalized_fields,
@@ -749,6 +831,7 @@ class EvidenceMatrixService:
         paper: dict[str, Any],
         index_config_hash: str,
         error: str,
+        build_mode: str = "standard",
     ) -> dict[str, Any]:
         return {
             "paper": paper,
@@ -759,6 +842,7 @@ class EvidenceMatrixService:
             "error": error,
             "quality": self._compute_quality(_empty_fields(), []),
             "dropped_items": [],
+            "build_mode": build_mode,
             "updated_at": _now_iso(),
             "index_config_hash": index_config_hash,
         }

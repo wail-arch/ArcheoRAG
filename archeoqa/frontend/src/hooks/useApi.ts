@@ -242,6 +242,7 @@ export interface MatrixRow {
   curation: MatrixCuration;
   dropped_items: MatrixDroppedItem[];
   error?: string;
+  build_mode?: 'standard' | 'cheap';
   updated_at: string;
   index_config_hash: string;
 }
@@ -268,6 +269,8 @@ export interface MatrixBuildResponse {
   skipped: number;
   failed: number;
   total: number;
+  mode?: 'standard' | 'cheap';
+  selected?: boolean;
   matrix: MatrixResponse;
 }
 
@@ -321,10 +324,26 @@ export function getEvidenceMatrix(): Promise<MatrixResponse> {
   return apiFetch('/analysis/matrix');
 }
 
-export function buildEvidenceMatrix(force = false): Promise<MatrixBuildResponse> {
+export interface MatrixBuildOptions {
+  force?: boolean;
+  mode?: 'standard' | 'cheap';
+  file_locations?: string[];
+}
+
+export function buildEvidenceMatrix(
+  forceOrOptions: boolean | MatrixBuildOptions = false
+): Promise<MatrixBuildResponse> {
+  const body =
+    typeof forceOrOptions === 'boolean'
+      ? { force: forceOrOptions }
+      : {
+          force: forceOrOptions.force ?? false,
+          mode: forceOrOptions.mode ?? 'standard',
+          file_locations: forceOrOptions.file_locations,
+        };
   return apiFetch('/analysis/matrix/build', {
     method: 'POST',
-    body: JSON.stringify({ force }),
+    body: JSON.stringify(body),
   });
 }
 
