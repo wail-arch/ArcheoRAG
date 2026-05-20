@@ -316,6 +316,45 @@ export interface PaperManifestResponse {
   status: PaperManifestStatus;
 }
 
+export interface SimilarityPaper {
+  file_location: string;
+  filename: string;
+  docname: string;
+  title?: string | null;
+  year?: number | null;
+  citation: string;
+  label: string;
+}
+
+export interface SimilarityResult {
+  paper: SimilarityPaper;
+  score: number;
+  confidence: 'high' | 'medium' | 'low';
+  shared: Record<string, string[]>;
+  missing: {
+    source: string[];
+    target: string[];
+  };
+  source: 'indexed_only' | 'matrix_derived';
+  matrix_status: MatrixRow['status'] | null;
+  needs_review: boolean;
+  rationale: string;
+}
+
+export interface SimilarityResponse {
+  source_paper: SimilarityPaper;
+  results: SimilarityResult[];
+  metadata: {
+    strategy: string;
+    limit: number;
+    include_indexed_only: boolean;
+    matrix_rows: number;
+    indexed_only_rows: number;
+    total_candidates: number;
+  };
+  warnings: string[];
+}
+
 export function getMatrixStatus(): Promise<MatrixStatus> {
   return apiFetch('/analysis/matrix/status');
 }
@@ -387,6 +426,20 @@ export function getPaperManifest(): Promise<PaperManifestResponse> {
 
 export function buildPaperManifest(): Promise<PaperManifestResponse> {
   return apiFetch('/analysis/manifest/build', { method: 'POST' });
+}
+
+export function findSimilarPapers(
+  fileLocation: string,
+  options: { limit?: number; include_indexed_only?: boolean } = {}
+): Promise<SimilarityResponse> {
+  return apiFetch('/analysis/similarity', {
+    method: 'POST',
+    body: JSON.stringify({
+      file_location: fileLocation,
+      limit: options.limit ?? 10,
+      include_indexed_only: options.include_indexed_only ?? true,
+    }),
+  });
 }
 
 // Settings

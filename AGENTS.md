@@ -21,6 +21,8 @@ ArcheoRAG is a local archaeology research assistant built on PaperQA2. PaperQA r
 - Paper resolver: `archeoqa/backend/services/paper_resolver.py`.
 - Evidence Matrix service: `archeoqa/backend/services/analysis_service.py`.
 - Paper manifest service: `archeoqa/backend/services/paper_manifest_service.py`; it derives runtime metadata in `archeoqa/data/analysis/paper_manifest.json` from the index and Evidence Matrix without LLM calls.
+- Similarity Finder V1: `archeoqa/backend/services/similarity_service.py` ranks papers from the runtime manifest/Matrix with deterministic weighted overlap. It must not call PaperQA retrieval or an LLM.
+- Some bibliographic papers may have multiple indexed PDFs, especially main article + supplementary information. This is expected because PaperQA indexes files; later workflows should distinguish or group these under one bibliographic work while preserving document-level retrieval/citations.
 - Selected-paper comparisons use a balanced per-paper retrieval path in `qa_service.py`: gather evidence separately for each selected/resolved paper, keep sources isolated to those papers, then synthesize the final comparison.
 - The balanced comparison path has a conservative context-quality filter to drop bibliography/reference-like contexts only when enough better contexts remain for the same paper.
 - Matrix-assisted comparisons may use Evidence Matrix/manifest notes as non-citable guidance, but final answers must still cite PaperQA contexts only and must fall back cleanly when Matrix data is missing.

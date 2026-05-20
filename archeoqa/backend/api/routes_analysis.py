@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from ..services.analysis_service import get_analysis_service
 from ..services.paper_manifest_service import get_manifest_service
+from ..services.similarity_service import get_similarity_service
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -34,6 +35,12 @@ class MatrixRowCurationRequest(BaseModel):
 class MatrixVerifyRequest(BaseModel):
     verified: bool = True
     field: str | None = None
+
+
+class SimilarityRequest(BaseModel):
+    file_location: str
+    limit: int = 10
+    include_indexed_only: bool = True
 
 
 @router.get("/matrix/status")
@@ -116,3 +123,17 @@ async def build_paper_manifest():
     """Rebuild the lightweight paper manifest from index and matrix metadata."""
     service = get_manifest_service()
     return await service.build_manifest()
+
+
+@router.post("/similarity")
+async def find_similar_papers(request: SimilarityRequest):
+    """Return deterministic paper similarity over manifest/Matrix metadata."""
+    service = get_similarity_service()
+    try:
+        return await service.find_similar(
+            file_location=request.file_location,
+            limit=request.limit,
+            include_indexed_only=request.include_indexed_only,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Source paper not found") from exc

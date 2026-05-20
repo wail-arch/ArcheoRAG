@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { MessageSquare, Library, Settings, Landmark, DollarSign, Sun, Moon, TableProperties } from 'lucide-react';
+import { MessageSquare, Library, Settings, Landmark, DollarSign, Sun, Moon, TableProperties, GitCompare } from 'lucide-react';
 import { getTotalCost } from '../utils/chatHistory';
 
 const navItems = [
   { to: '/', label: 'Chat', icon: MessageSquare },
   { to: '/library', label: 'Bibliothèque', icon: Library },
   { to: '/matrix', label: 'Matrice', icon: TableProperties },
+  { to: '/similarity', label: 'Similarités', icon: GitCompare },
   { to: '/settings', label: 'Paramètres', icon: Settings },
 ];
 
