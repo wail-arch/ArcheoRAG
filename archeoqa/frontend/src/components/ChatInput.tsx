@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { Send, Bot, Filter, X, GitCompareArrows } from 'lucide-react';
 import { getIndexedPapers, type IndexedPaper } from '../hooks/useApi';
+import { consumeComparePrefill } from '../utils/comparePrefill';
 
 interface ChatInputProps {
   onSubmit: (question: string, useAgent: boolean, paperFilter?: string[]) => void;
@@ -8,10 +9,13 @@ interface ChatInputProps {
 }
 
 export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
-  const [question, setQuestion] = useState('');
+  const [initialPrefill] = useState(() => consumeComparePrefill());
+  const [question, setQuestion] = useState(initialPrefill?.question ?? '');
   const [useAgent, setUseAgent] = useState(false);
   const [papers, setPapers] = useState<IndexedPaper[]>([]);
-  const [selectedPapers, setSelectedPapers] = useState<string[]>([]);
+  const [selectedPapers, setSelectedPapers] = useState<string[]>(
+    initialPrefill?.paper_filter ?? []
+  );
   const [showFilter, setShowFilter] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const comparisonQuestion =
@@ -44,7 +48,9 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
     if (isLoading || selectedPapers.length < 2 || selectedPapers.length > 5) return;
     const customQuestion = question.trim();
     const q = customQuestion
-      ? `Compare uniquement les papiers sélectionnés sur cette question : ${customQuestion}`
+      ? customQuestion.toLowerCase().startsWith('compare uniquement les papiers sélectionnés')
+        ? customQuestion
+        : `Compare uniquement les papiers sélectionnés sur cette question : ${customQuestion}`
       : comparisonQuestion;
     onSubmit(q, useAgent, selectedPapers);
     if (customQuestion) setQuestion('');
@@ -56,13 +62,15 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
     );
   };
 
-  const formatDocname = (docname?: string, filename?: string, title?: string | null, year?: number | null): string => {
-    if (title && year) return `${title.slice(0, 30)}${title.length > 30 ? '…' : ''} (${year})`;
-    if (filename) return filename.length > 30 ? filename.slice(0, 30) + '…' : filename;
+  const formatDocname = (docname?: string, filename?: string, title?: string | null, year?: number | null, maxLength = 56): string => {
+    if (title) {
+      return `${title.slice(0, maxLength)}${title.length > maxLength ? '…' : ''}${year ? ` (${year})` : ''}`;
+    }
+    if (filename) return filename.length > maxLength ? filename.slice(0, maxLength) + '…' : filename;
     if (!docname) return '';
     const m = docname.match(/^([a-z]+)(\d{4})/i);
     if (m) return `${m[1].charAt(0).toUpperCase() + m[1].slice(1)} ${m[2]}`;
-    return docname.length > 30 ? docname.slice(0, 30) + '…' : docname;
+    return docname.length > maxLength ? docname.slice(0, maxLength) + '…' : docname;
   };
 
   const paperLabel = (fileLocation: string): string => {
@@ -73,8 +81,8 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
   const sortedPapers = useMemo(
     () =>
       [...papers].sort((a, b) =>
-        formatDocname(a.docname, a.filename, a.title, a.year).localeCompare(
-          formatDocname(b.docname, b.filename, b.title, b.year),
+        formatDocname(a.docname, a.filename, a.title, a.year, 120).localeCompare(
+          formatDocname(b.docname, b.filename, b.title, b.year, 120),
           'fr',
           { sensitivity: 'base' }
         )
@@ -184,7 +192,16 @@ export default function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
                           ? 'bg-amber-500 border-amber-500'
                           : 'border-gray-300 dark:border-gray-600'
                       }`} />
-                      <span className="leading-snug line-clamp-2">{formatDocname(paper.docname, paper.filename, paper.title, paper.year)}</span>
+                      <span className="min-w-0">
+                        <span className="block leading-snug line-clamp-2">
+                          {formatDocname(paper.docname, paper.filename, paper.title, paper.year)}
+                        </span>
+                        {paper.filename && paper.title && (
+                          <span className="block mt-1 text-xs text-gray-400 line-clamp-1">
+                            {paper.filename}
+                          </span>
+                        )}
+                      </span>
                     </button>
                   ))}
                 </div>

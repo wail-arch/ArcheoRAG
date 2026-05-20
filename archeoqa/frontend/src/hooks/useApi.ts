@@ -355,6 +355,44 @@ export interface SimilarityResponse {
   warnings: string[];
 }
 
+export interface DifferencePaper extends SimilarityPaper {
+  source: 'indexed_only' | 'matrix_derived';
+  matrix_status: MatrixRow['status'] | null;
+  row_verified: boolean;
+  needs_review: boolean;
+}
+
+export interface DifferenceByPaper {
+  paper: DifferencePaper;
+  fields: Record<string, string[]>;
+  note: string;
+}
+
+export interface MissingByPaper {
+  paper: DifferencePaper;
+  fields: string[];
+}
+
+export interface DifferenceResponse {
+  papers: DifferencePaper[];
+  excluded_papers: DifferencePaper[];
+  shared: Record<string, string[]>;
+  differences: DifferenceByPaper[];
+  missing: MissingByPaper[];
+  quality: {
+    strategy: string;
+    paper_count: number;
+    matrix_rows: number;
+    indexed_only_rows: number;
+    needs_review_rows: number;
+    strong_fields: string[];
+    weak_fields: string[];
+    confidence: 'high' | 'medium' | 'low';
+  };
+  suggested_compare_question: string;
+  warnings: string[];
+}
+
 export function getMatrixStatus(): Promise<MatrixStatus> {
   return apiFetch('/analysis/matrix/status');
 }
@@ -437,6 +475,19 @@ export function findSimilarPapers(
     body: JSON.stringify({
       file_location: fileLocation,
       limit: options.limit ?? 10,
+      include_indexed_only: options.include_indexed_only ?? true,
+    }),
+  });
+}
+
+export function comparePaperDifferences(
+  fileLocations: string[],
+  options: { include_indexed_only?: boolean } = {}
+): Promise<DifferenceResponse> {
+  return apiFetch('/analysis/difference', {
+    method: 'POST',
+    body: JSON.stringify({
+      file_locations: fileLocations,
       include_indexed_only: options.include_indexed_only ?? true,
     }),
   });

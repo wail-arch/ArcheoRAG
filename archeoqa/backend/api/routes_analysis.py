@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..services.analysis_service import get_analysis_service
+from ..services.difference_service import get_difference_service
 from ..services.paper_manifest_service import get_manifest_service
 from ..services.similarity_service import get_similarity_service
 
@@ -40,6 +41,11 @@ class MatrixVerifyRequest(BaseModel):
 class SimilarityRequest(BaseModel):
     file_location: str
     limit: int = 10
+    include_indexed_only: bool = True
+
+
+class DifferenceRequest(BaseModel):
+    file_locations: list[str]
     include_indexed_only: bool = True
 
 
@@ -137,3 +143,18 @@ async def find_similar_papers(request: SimilarityRequest):
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Source paper not found") from exc
+
+
+@router.post("/difference")
+async def compare_paper_differences(request: DifferenceRequest):
+    """Return deterministic structured differences for selected papers."""
+    service = get_difference_service()
+    try:
+        return await service.compare_papers(
+            file_locations=request.file_locations,
+            include_indexed_only=request.include_indexed_only,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Selected paper not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
