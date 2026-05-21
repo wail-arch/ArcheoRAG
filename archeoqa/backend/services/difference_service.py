@@ -81,6 +81,31 @@ FOCUS_SKIP_VALUES = {
     "ceramic",
 }
 
+CENTRAL_GENETIC_METHODS = {"adna", "autosomal", "y dna", "y-dna"}
+
+CONTEXTUAL_SHARED_VALUES = FOCUS_SKIP_VALUES | {
+    "europe",
+    "eastern mediterranean",
+    "western mediterranean",
+    "near east",
+    "northwest africa",
+    "southwest asia",
+    "late pleistocene",
+    "middle palaeolithic",
+    "middle paleolithic",
+    "middle stone age",
+    "epipaleolithic",
+    "epi palaeolithic",
+    "epi-palaeolithic",
+    "aterian",
+    "ibero-maurusian",
+    "iberomaurusian",
+    "primary study",
+    "primary_study",
+    "preprint",
+    "review",
+}
+
 
 def _as_values(row: dict[str, Any], field: str) -> list[str]:
     value = row.get(field)
@@ -171,6 +196,40 @@ def _focus_values(field: str, values: list[str]) -> list[str]:
     return focused[:4]
 
 
+def _is_central_shared_value(field: str, value: str) -> bool:
+    key = normalize_text(value)
+    if not key or key in CONTEXTUAL_SHARED_VALUES:
+        return False
+    if field == "sites":
+        return True
+    if field == "date_ranges":
+        return True
+    if field == "method_tags":
+        return key in CENTRAL_GENETIC_METHODS
+    if field == "periods":
+        return any(char.isdigit() for char in value) or len(value.split()) >= 3
+    if field == "regions":
+        directional = ("north", "south", "east", "west", "northern", "southern", "eastern", "western")
+        return "(" in value or any(term in key.split() for term in directional) or len(value.split()) >= 3
+    if field == "evidence_types":
+        strong_terms = ("adna", "ancient dna", "genome wide", "genome-wide", "autosomal", "y chromosome", "y-chromosome")
+        return any(term in key for term in strong_terms)
+    return False
+
+
+def _split_shared_values(shared: dict[str, list[str]]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    central: dict[str, list[str]] = {}
+    contextual: dict[str, list[str]] = {}
+    for field, values in shared.items():
+        central_values = [value for value in values if _is_central_shared_value(field, value)]
+        contextual_values = [value for value in values if value not in central_values]
+        if central_values:
+            central[field] = central_values
+        if contextual_values:
+            contextual[field] = contextual_values
+    return central, contextual
+
+
 def _suggested_question(rows: list[dict[str, Any]], shared: dict[str, list[str]]) -> str:
     labels = ", ".join(str(row.get("label") or row.get("filename")) for row in rows)
     focus_parts = []
@@ -237,6 +296,7 @@ class DifferenceService:
             for field in COMPARISON_FIELDS
             if (values := _shared_values(selected_rows, field))
         }
+        shared_central, shared_contextual = _split_shared_values(shared)
 
         differences = []
         missing_by_paper = []
@@ -288,6 +348,8 @@ class DifferenceService:
             "papers": [_paper_summary(row) for row in selected_rows],
             "excluded_papers": [_paper_summary(row) for row in excluded_rows],
             "shared": shared,
+            "shared_central": shared_central,
+            "shared_contextual": shared_contextual,
             "differences": differences,
             "missing": missing_by_paper,
             "quality": {
@@ -300,7 +362,7 @@ class DifferenceService:
                 "weak_fields": sorted(set(COMPARISON_FIELDS) - STRONG_FIELDS),
                 "confidence": self._confidence(selected_rows),
             },
-            "suggested_compare_question": _suggested_question(selected_rows, shared),
+            "suggested_compare_question": _suggested_question(selected_rows, shared_central),
             "warnings": warnings,
         }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { MessageSquare, Library, Settings, Landmark, DollarSign, Sun, Moon, TableProperties, GitCompare, GitCompareArrows } from 'lucide-react';
+import { MessageSquare, Library, Settings, Landmark, DollarSign, Sun, Moon, TableProperties, GitCompare, GitCompareArrows, AlertTriangle } from 'lucide-react';
 import { getTotalCost } from '../utils/chatHistory';
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/matrix', label: 'Matrice', icon: TableProperties },
   { to: '/similarity', label: 'Similarités', icon: GitCompare },
   { to: '/comparison-lab', label: 'Comparison Lab', icon: GitCompareArrows },
+  { to: '/gap-finder', label: 'Gap Finder', icon: AlertTriangle },
   { to: '/settings', label: 'Paramètres', icon: Settings },
 ];
 

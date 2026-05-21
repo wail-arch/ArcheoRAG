@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from ..services.analysis_service import get_analysis_service
 from ..services.difference_service import get_difference_service
+from ..services.gap_service import get_gap_service
 from ..services.paper_manifest_service import get_manifest_service
 from ..services.similarity_service import get_similarity_service
 
@@ -47,6 +48,12 @@ class SimilarityRequest(BaseModel):
 class DifferenceRequest(BaseModel):
     file_locations: list[str]
     include_indexed_only: bool = True
+
+
+class GapRequest(BaseModel):
+    file_locations: list[str] | None = None
+    include_indexed_only: bool = True
+    scope: Literal["selection", "corpus"] | None = None
 
 
 @router.get("/matrix/status")
@@ -153,6 +160,22 @@ async def compare_paper_differences(request: DifferenceRequest):
         return await service.compare_papers(
             file_locations=request.file_locations,
             include_indexed_only=request.include_indexed_only,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Selected paper not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/gaps")
+async def find_matrix_gaps(request: GapRequest):
+    """Return deterministic Matrix coverage gaps for selected papers or corpus."""
+    service = get_gap_service()
+    try:
+        return await service.find_gaps(
+            file_locations=request.file_locations,
+            include_indexed_only=request.include_indexed_only,
+            scope=request.scope,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Selected paper not found") from exc

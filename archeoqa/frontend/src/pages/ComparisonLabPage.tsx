@@ -324,7 +324,16 @@ export default function ComparisonLabPage() {
             ) : (
               <>
                 <QualityCard result={result} />
-                <FieldPanel title="Commun" fields={result.shared} emptyText="Aucun champ structuré commun à tous les papiers." />
+                <FieldPanel
+                  title="Commun central"
+                  fields={sharedCentral(result)}
+                  emptyText="Aucun axe central commun détecté entre tous les papiers."
+                />
+                <FieldPanel
+                  title="Commun contextuel"
+                  fields={sharedContextual(result)}
+                  emptyText="Aucun commun contextuel détecté."
+                />
                 <DifferencesPanel result={result} />
                 <MissingPanel result={result} />
               </>
@@ -488,6 +497,14 @@ function formatFieldEntries(fields: Record<string, string[]>): string[] {
   return entries.map(([field, values]) => `- ${FIELD_LABELS[field] || field}: ${values.join(', ')}`);
 }
 
+function sharedCentral(result: DifferenceResponse): Record<string, string[]> {
+  return result.shared_central || {};
+}
+
+function sharedContextual(result: DifferenceResponse): Record<string, string[]> {
+  return result.shared_contextual || result.shared;
+}
+
 function formatDifferenceExport(result: DifferenceResponse): string {
   const lines = [
     '# Comparison Lab / Difference Finder V1',
@@ -501,7 +518,16 @@ function formatDifferenceExport(result: DifferenceResponse): string {
   if (result.warnings.length > 0) {
     lines.push(`Warnings: ${result.warnings.join(' | ')}`);
   }
-  lines.push('', '## Commun', ...formatFieldEntries(result.shared), '', '## Différences');
+  lines.push(
+    '',
+    '## Commun central',
+    ...formatFieldEntries(sharedCentral(result)),
+    '',
+    '## Commun contextuel',
+    ...formatFieldEntries(sharedContextual(result)),
+    '',
+    '## Différences'
+  );
   result.differences.forEach((item) => {
     lines.push('', `### ${item.paper.label}`, `Note: ${item.note}`, ...formatFieldEntries(item.fields));
   });

@@ -377,6 +377,8 @@ export interface DifferenceResponse {
   papers: DifferencePaper[];
   excluded_papers: DifferencePaper[];
   shared: Record<string, string[]>;
+  shared_central?: Record<string, string[]>;
+  shared_contextual?: Record<string, string[]>;
   differences: DifferenceByPaper[];
   missing: MissingByPaper[];
   quality: {
@@ -390,6 +392,60 @@ export interface DifferenceResponse {
     confidence: 'high' | 'medium' | 'low';
   };
   suggested_compare_question: string;
+  warnings: string[];
+}
+
+export type GapPaper = DifferencePaper;
+
+export interface GapByPaper {
+  paper: GapPaper;
+  missing_fields: string[];
+  weak_fields: string[];
+  reasons: string[];
+  severity: 'high' | 'medium' | 'low' | 'none';
+  recommended_actions: string[];
+}
+
+export interface GapByField {
+  field: string;
+  label: string;
+  present_count: number;
+  missing_count: number;
+  weak_count: number;
+  coverage_ratio: number;
+  missing_papers: GapPaper[];
+  weak_papers: GapPaper[];
+}
+
+export interface GapAction {
+  type: string;
+  label: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low';
+  file_locations: string[];
+}
+
+export interface GapResponse {
+  scope: 'selection' | 'corpus';
+  papers: GapPaper[];
+  excluded_papers: GapPaper[];
+  summary: {
+    strategy: string;
+    paper_count: number;
+    total_manifest_rows: number;
+    matrix_rows: number;
+    indexed_only_rows: number;
+    needs_review_rows: number;
+    verified_rows: number;
+    gap_paper_count: number;
+    review_only_count?: number;
+    completion_gap_count?: number;
+  };
+  paper_gaps: GapByPaper[];
+  review_gaps?: GapByPaper[];
+  completion_gaps?: GapByPaper[];
+  field_gaps: GapByField[];
+  actions: GapAction[];
   warnings: string[];
 }
 
@@ -489,6 +545,23 @@ export function comparePaperDifferences(
     body: JSON.stringify({
       file_locations: fileLocations,
       include_indexed_only: options.include_indexed_only ?? true,
+    }),
+  });
+}
+
+export function findMatrixGaps(
+  options: {
+    file_locations?: string[];
+    include_indexed_only?: boolean;
+    scope?: 'selection' | 'corpus';
+  } = {}
+): Promise<GapResponse> {
+  return apiFetch('/analysis/gaps', {
+    method: 'POST',
+    body: JSON.stringify({
+      file_locations: options.file_locations,
+      include_indexed_only: options.include_indexed_only ?? true,
+      scope: options.scope,
     }),
   });
 }
