@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..services.analysis_service import get_analysis_service
+from ..services.contradiction_service import get_contradiction_service
 from ..services.difference_service import get_difference_service
 from ..services.gap_service import get_gap_service
 from ..services.paper_manifest_service import get_manifest_service
@@ -54,6 +55,13 @@ class GapRequest(BaseModel):
     file_locations: list[str] | None = None
     include_indexed_only: bool = True
     scope: Literal["selection", "corpus"] | None = None
+
+
+class ContradictionRequest(BaseModel):
+    file_locations: list[str] | None = None
+    scope: Literal["selection", "corpus"] | None = None
+    include_indexed_only: bool = False
+    limit: int = 20
 
 
 @router.get("/matrix/status")
@@ -176,6 +184,23 @@ async def find_matrix_gaps(request: GapRequest):
             file_locations=request.file_locations,
             include_indexed_only=request.include_indexed_only,
             scope=request.scope,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Selected paper not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/contradictions")
+async def find_candidate_contradictions(request: ContradictionRequest):
+    """Return deterministic Matrix-only candidate tensions between papers."""
+    service = get_contradiction_service()
+    try:
+        return await service.find_contradictions(
+            file_locations=request.file_locations,
+            scope=request.scope,
+            include_indexed_only=request.include_indexed_only,
+            limit=request.limit,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Selected paper not found") from exc

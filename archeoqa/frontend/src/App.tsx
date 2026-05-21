@@ -6,6 +6,7 @@ import MatrixPage from './pages/MatrixPage';
 import SimilarityPage from './pages/SimilarityPage';
 import ComparisonLabPage from './pages/ComparisonLabPage';
 import GapFinderPage from './pages/GapFinderPage';
+import ContradictionsPage from './pages/ContradictionsPage';
 import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/similarity" element={<SimilarityPage />} />
             <Route path="/comparison-lab" element={<ComparisonLabPage />} />
             <Route path="/gap-finder" element={<GapFinderPage />} />
+            <Route path="/contradictions" element={<ContradictionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

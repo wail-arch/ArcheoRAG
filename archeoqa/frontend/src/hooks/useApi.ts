@@ -449,6 +449,43 @@ export interface GapResponse {
   warnings: string[];
 }
 
+export type ContradictionPaper = DifferencePaper;
+
+export interface ContradictionCandidate {
+  papers: ContradictionPaper[];
+  tension_type:
+    | 'candidate_tension'
+    | 'dating_tension'
+    | 'claim_tension'
+    | 'method_inference_tension'
+    | 'uncertainty_tension';
+  score: number;
+  confidence: 'high' | 'medium' | 'low';
+  shared: Record<string, string[]>;
+  divergent: Record<string, { paper_a: string[]; paper_b: string[] }>;
+  rationale: string;
+  warnings: string[];
+  suggested_compare_question: string;
+}
+
+export interface ContradictionResponse {
+  scope: 'selection' | 'corpus';
+  papers: ContradictionPaper[];
+  excluded_papers: ContradictionPaper[];
+  candidates: ContradictionCandidate[];
+  metadata: {
+    strategy: string;
+    limit: number;
+    paper_count: number;
+    matrix_rows: number;
+    indexed_only_rows: number;
+    needs_review_rows: number;
+    considered_pairs: number;
+    candidate_count: number;
+  };
+  warnings: string[];
+}
+
 export function getMatrixStatus(): Promise<MatrixStatus> {
   return apiFetch('/analysis/matrix/status');
 }
@@ -562,6 +599,25 @@ export function findMatrixGaps(
       file_locations: options.file_locations,
       include_indexed_only: options.include_indexed_only ?? true,
       scope: options.scope,
+    }),
+  });
+}
+
+export function findCandidateContradictions(
+  options: {
+    file_locations?: string[];
+    include_indexed_only?: boolean;
+    scope?: 'selection' | 'corpus';
+    limit?: number;
+  } = {}
+): Promise<ContradictionResponse> {
+  return apiFetch('/analysis/contradictions', {
+    method: 'POST',
+    body: JSON.stringify({
+      file_locations: options.file_locations,
+      include_indexed_only: options.include_indexed_only ?? false,
+      scope: options.scope,
+      limit: options.limit ?? 20,
     }),
   });
 }
