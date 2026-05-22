@@ -127,16 +127,18 @@ cd ArcheoRAG
 git checkout codex/tester-onboarding-v1
 ```
 
-3. Start with CPU mode:
+3. Start ArcheoRAG.
 
-```powershell
-docker compose up --build
-```
-
-If you have an NVIDIA RTX GPU, for example RTX 3060 or better, use GPU mode instead:
+If you have an NVIDIA RTX GPU, for example RTX 3060 or better, use this GPU command and skip the CPU command:
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+If you do not have an NVIDIA RTX GPU, or you are unsure, use CPU mode:
+
+```powershell
+docker compose up --build
 ```
 
 4. Open the app:

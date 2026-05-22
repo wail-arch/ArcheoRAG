@@ -20,20 +20,11 @@ You do not need to click anything in Docker Desktop for the first launch. The fi
 
 ## 2. Start ArcheoQA
 
-### Option A: normal CPU mode
-
-Use this if you are unsure, or if your computer does not have an NVIDIA RTX GPU.
-
-```powershell
-cd C:\Users\Wail\Desktop\archeorag
-docker compose up --build
-```
-
-CPU mode is the safest mode. It is slower for indexing, but it avoids CUDA and NVIDIA setup problems.
-
-### Option B: NVIDIA RTX / CUDA mode
+### Option A: NVIDIA RTX / CUDA mode
 
 Use this if your computer has an NVIDIA RTX GPU, for example RTX 3060 or better.
+
+If you have an RTX GPU, run this command first and skip the CPU command.
 
 ```powershell
 cd C:\Users\Wail\Desktop\archeorag
@@ -43,6 +34,17 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 GPU mode is faster for local embeddings and indexing, but the first build is much larger because Docker installs CUDA-enabled PyTorch dependencies inside the container.
 
 Your Windows CUDA or Python install is not reused by Docker. Docker only reuses the NVIDIA driver and GPU access from your machine.
+
+### Option B: normal CPU mode
+
+Use this if you do not have an NVIDIA RTX GPU, or if GPU startup fails.
+
+```powershell
+cd C:\Users\Wail\Desktop\archeorag
+docker compose up --build
+```
+
+CPU mode is slower for indexing, but it is the safest fallback because it avoids CUDA and NVIDIA setup problems.
 
 ## 3. Open the app
 
