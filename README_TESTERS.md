@@ -18,27 +18,7 @@ After installation:
 
 You do not need to click anything in Docker Desktop for the first launch. The first launch is done with one PowerShell command below. After that, the app appears in Docker Desktop under **Containers** as `archeorag`.
 
-## 2. Add your API key
-
-Open PowerShell and run:
-
-```powershell
-cd C:\Users\Wail\Desktop\archeorag
-Copy-Item archeoqa\.env.example archeoqa\.env
-notepad archeoqa\.env
-```
-
-In Notepad, replace:
-
-```text
-OPENAI_API_KEY=sk-...
-```
-
-with your real OpenAI API key, then save the file.
-
-The app uses paid model API calls. Indexing, Matrix builds, Compare cite, and Chat can cost money depending on usage.
-
-## 3. Start ArcheoQA
+## 2. Start ArcheoQA
 
 ### Option A: normal CPU mode
 
@@ -64,7 +44,7 @@ GPU mode is faster for local embeddings and indexing, but the first build is muc
 
 Your Windows CUDA or Python install is not reused by Docker. Docker only reuses the NVIDIA driver and GPU access from your machine.
 
-## 4. Open the app
+## 3. Open the app
 
 When the containers are running, open:
 
@@ -78,6 +58,18 @@ In Docker Desktop, go to **Containers**. You should see a group called `archeora
 - `frontend`
 
 After the first successful launch, you can stop/start the app from Docker Desktop with the play/stop buttons.
+
+## 4. Add your API key
+
+In the app:
+
+1. Open **Paramètres**.
+2. Paste your OpenAI API key.
+3. Save.
+
+You can also add Google or Perplexity keys there later if needed. You do not need to edit `.env` manually for normal testing.
+
+The app uses paid model API calls. Indexing, Matrix builds, Compare cite, and Chat can cost money depending on usage.
 
 ## 5. Basic test flow
 
@@ -167,7 +159,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml logs backend --ta
 - PDFs are stored locally in `archeoqa/data`.
 - Retrieved text snippets and questions can be sent to the configured model providers.
 - Evidence Matrix builds and Compare cite calls can send multiple model requests.
-- Do not share your `archeoqa/.env` file. It contains your API key.
+- Do not share your `archeoqa/.env` file if it exists. It contains your API key.
 
 ## 10. If you get stuck
 

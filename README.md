@@ -98,11 +98,10 @@ ArcheoRAG/
 
 ## Prerequisites
 
-- Python 3.11+
-- Node.js 18+
-- OpenAI API key for answer generation
-- Optional Google AI API key for multimodal/enrichment paths
-- Optional NVIDIA GPU + CUDA PyTorch for faster local embeddings/indexing
+- Docker Desktop for the recommended tester setup.
+- An OpenAI API key for answer generation.
+- Optional NVIDIA RTX GPU for faster local embeddings/indexing.
+- Python 3.11+ and Node.js 18+ only if you choose the manual developer setup.
 
 Runtime data, indexes, PDFs, local settings, and `.env` files are ignored by Git.
 
@@ -110,81 +109,77 @@ Runtime data, indexes, PDFs, local settings, and `.env` files are ignored by Git
 
 ## Installation
 
-### 1. Clone
+There are two ways to run ArcheoRAG.
 
-```bash
+### Option A: Docker, recommended for testers
+
+Use this if you are not technical, or if you only want to test the app.
+
+1. Install Docker Desktop:
+
+   https://www.docker.com/products/docker-desktop/
+
+2. Clone the repository and switch to this tester branch:
+
+```powershell
 git clone https://github.com/wail-arch/ArcheoRAG.git
-cd ArcheoRAG/archeoqa
+cd ArcheoRAG
+git checkout codex/tester-onboarding-v1
 ```
 
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-On Windows PowerShell:
+3. Start with CPU mode:
 
 ```powershell
-Copy-Item .env.example .env
+docker compose up --build
 ```
 
-Then edit `.env`:
-
-```env
-OPENAI_API_KEY=sk-...
-GOOGLE_API_KEY=...          # optional
-PERPLEXITY_API_KEY=...      # optional
-PAPERS_DIR=./data/papers
-```
-
-### 3. Install backend
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-```
-
-On Windows PowerShell:
+If you have an NVIDIA RTX GPU, for example RTX 3060 or better, use GPU mode instead:
 
 ```powershell
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+4. Open the app:
+
+```text
+http://localhost:5173
+```
+
+5. Go to **Paramètres** in the app and paste your OpenAI API key.
+
+The detailed tester guide is here: [README_TESTERS.md](README_TESTERS.md).
+
+### Option B: manual developer setup
+
+Use this only if you want to develop the backend/frontend directly without Docker.
+
+Install backend:
+
+```powershell
+cd C:\Users\Wail\Desktop\archeorag\archeoqa
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r backend\requirements.txt
 ```
 
-For CUDA acceleration, install a CUDA-enabled PyTorch build in the same virtual
-environment, then verify:
+Install frontend:
 
 ```powershell
-python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
-```
-
-### 4. Install frontend
-
-```bash
-cd frontend
+cd C:\Users\Wail\Desktop\archeorag\archeoqa\frontend
 npm install
-cd ..
 ```
 
----
+Run backend:
 
-## Run Locally
-
-Open two terminals from `ArcheoRAG/archeoqa`.
-
-Backend:
-
-```bash
-uvicorn backend.app:app --host 127.0.0.1 --port 8000
+```powershell
+cd C:\Users\Wail\Desktop\archeorag
+.\archeoqa\.venv\Scripts\python.exe -m uvicorn archeoqa.backend.app:app --reload --port 8000
 ```
 
-Frontend:
+Run frontend in a second terminal:
 
-```bash
-cd frontend
+```powershell
+cd C:\Users\Wail\Desktop\archeorag\archeoqa\frontend
 npm run dev
 ```
 
@@ -227,10 +222,11 @@ Environment variables:
 | `PERPLEXITY_API_KEY` | No | Reserved optional provider key |
 | `PAPERS_DIR` | No | PDF directory, default `./data/papers` |
 | `PQA_INDEX_DIR` | No | PaperQA index directory, default `./data/indexes` |
-| `LOCAL_EMBEDDING_DEVICE` | No | `cuda` by default for local SentenceTransformers |
+| `LOCAL_EMBEDDING_DEVICE` | No | `auto`, `cpu`, or `cuda` for local SentenceTransformers |
 | `LOCAL_EMBEDDING_BATCH_SIZE` | No | Batch size for local embeddings, default `64` |
 
 Settings changed from the UI are merged into `archeoqa/data/settings.json`.
+API keys entered from the UI are persisted to `archeoqa/.env`.
 Changing core indexing settings marks the index/matrix stale instead of silently
 reusing incompatible data.
 
