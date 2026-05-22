@@ -98,7 +98,15 @@ def _default_embedding_config(embedding: str) -> dict[str, Any] | None:
     if not embedding.startswith("st-"):
         return None
 
-    device = os.getenv("LOCAL_EMBEDDING_DEVICE", "cuda")
+    device = os.getenv("LOCAL_EMBEDDING_DEVICE", "auto").strip().lower()
+    if device == "auto":
+        try:
+            import torch
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception:
+            device = "cpu"
+
     return {
         "device": device,
         "batch_size": int(os.getenv("LOCAL_EMBEDDING_BATCH_SIZE", "64")),

@@ -5,6 +5,9 @@ Local research assistant for archaeology papers, built on top of
 corpus, answers with citations, supports strict paper targeting, and adds a
 curatable Evidence Matrix for corpus-level research work.
 
+[Tester setup with Docker](README_TESTERS.md) is the recommended path for
+non-technical testers who only need to run the app locally.
+
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)

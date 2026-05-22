@@ -1,0 +1,16 @@
+.git
+.paperqa-upstream
+Papers
+
+archeoqa/.env
+archeoqa/.venv
+archeoqa/data
+
+archeoqa/frontend/node_modules
+archeoqa/frontend/dist
+
+__pycache__
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db

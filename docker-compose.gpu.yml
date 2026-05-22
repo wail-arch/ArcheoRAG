@@ -1,0 +1,8 @@
+services:
+  backend:
+    build:
+      dockerfile: archeoqa/backend/Dockerfile.gpu
+    environment:
+      LOCAL_EMBEDDING_DEVICE: auto
+      LOCAL_EMBEDDING_BATCH_SIZE: "64"
+    gpus: all

@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: archeoqa/backend/Dockerfile
+    env_file:
+      - path: ./archeoqa/.env
+        required: false
+    environment:
+      LOCAL_EMBEDDING_DEVICE: cpu
+      LOCAL_EMBEDDING_BATCH_SIZE: "32"
+      PAPERS_DIR: /app/archeoqa/data/papers
+      PQA_INDEX_DIR: /app/archeoqa/data/indexes
+    volumes:
+      - ./archeoqa/data:/app/archeoqa/data
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./archeoqa/frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
