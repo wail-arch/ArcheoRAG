@@ -59,7 +59,15 @@ In Docker Desktop, go to **Containers**. You should see a group called `archeora
 - `backend`
 - `frontend`
 
-After the first successful launch, you can stop/start the app from Docker Desktop with the play/stop buttons.
+After the first successful launch, you can stop/start the app from Docker Desktop:
+
+1. Open Docker Desktop.
+2. Go to **Containers**.
+3. Find `archeorag`.
+4. Click the blue **Play** button next to `archeorag`.
+5. Open `http://localhost:5173`.
+
+If `archeorag` does not appear in Docker Desktop yet, run the PowerShell command from step 2 once first.
 
 ## 4. Add your API key
 
@@ -113,19 +121,21 @@ cd C:\Users\Wail\Desktop\archeorag
 docker compose down
 ```
 
-To restart CPU mode:
+To restart CPU mode from PowerShell:
 
 ```powershell
 cd C:\Users\Wail\Desktop\archeorag
 docker compose up
 ```
 
-To restart GPU mode:
+To restart GPU mode from PowerShell:
 
 ```powershell
 cd C:\Users\Wail\Desktop\archeorag
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 ```
+
+Or restart from Docker Desktop by clicking **Play** next to `archeorag` in **Containers**.
 
 Your PDFs, indexes, settings, and Matrix files stay on your machine in:
 

@@ -149,6 +149,10 @@ http://localhost:5173
 
 5. Go to **Paramètres** in the app and paste your OpenAI API key.
 
+After the first successful launch, Docker Desktop shows a project named
+`archeorag` under **Containers**. Later, you can open Docker Desktop and click
+the blue **Play** button next to `archeorag` to start it again.
+
 The detailed tester guide is here: [README_TESTERS.md](README_TESTERS.md).
 
 ### Option B: manual developer setup
